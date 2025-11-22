@@ -1,0 +1,4 @@
+
+[submodule "thirdparty/ultralytics"]
+	path = thirdparty/ultralytics
+	url = https://github.com/btsd321/ultralytics.git
