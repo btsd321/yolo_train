@@ -209,12 +209,16 @@ def process_directory(input_dir: Path, output_dir: Path,
                 actual_height
             )
             
-            # 写入输出文件
+            # 写入输出文件（如果已存在则覆盖）
             output_file = output_dir / json_file.name
+            
+            # 检查文件是否已存在
+            file_status = "Overwritten" if output_file.exists() else "Created"
+            
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(xanylabel_data, f, indent=2, ensure_ascii=False)
             
-            print(f"✓ Converted: {json_file.name} -> {output_file.name}")
+            print(f"✓ {file_status}: {json_file.name} -> {output_file.name}")
             success_count += 1
             
         except Exception as e:
