@@ -604,28 +604,58 @@ def process_image(image_path: Path, json_path: Path, output_dir: Path,
                 
                 # 更新JSON中的坐标
                 if shape_idx is not None:
-                    # 使用JSON标注的情况
+                    # 使用JSON标注的情况：直接修改现有shape
                     new_points = xywh_to_points(final_x, final_y, final_w, final_h)
                     json_data["shapes"][shape_idx]["points"] = new_points
                     modified = True
                 else:
-                    # 使用YOLO检测的情况，添加新的shape
-                    new_shape = {
-                        "label": target_label,
-                        "score": None,
-                        "points": xywh_to_points(final_x, final_y, final_w, final_h),
-                        "group_id": None,
-                        "description": "Fixed by belt_detect_sign_fix",
-                        "difficult": False,
-                        "shape_type": "rectangle",
-                        "flags": {},
-                        "attributes": {},
-                        "kie_linking": []
-                    }
-                    if "shapes" not in json_data:
-                        json_data["shapes"] = []
-                    json_data["shapes"].append(new_shape)
-                    modified = True
+                    # 使用YOLO检测的情况：需要找到匹配的原始标注并修改它
+                    if best_match_box is not None:
+                        # 找到与best_match_box匹配的shape索引
+                        matched_shape_idx = None
+                        for idx, shape in enumerate(json_data.get("shapes", [])):
+                            if shape.get("label") == target_label:
+                                points = shape.get("points", [])
+                                if len(points) == 4:
+                                    shape_x, shape_y, shape_w, shape_h = points_to_xywh(points)
+                                    if (abs(shape_x - best_match_box[0]) < 1 and 
+                                        abs(shape_y - best_match_box[1]) < 1 and
+                                        abs(shape_w - best_match_box[2]) < 1 and
+                                        abs(shape_h - best_match_box[3]) < 1):
+                                        matched_shape_idx = idx
+                                        break
+                        
+                        if matched_shape_idx is not None:
+                            # 修改匹配到的原始标注
+                            new_points = xywh_to_points(final_x, final_y, final_w, final_h)
+                            json_data["shapes"][matched_shape_idx]["points"] = new_points
+                            if "description" not in json_data["shapes"][matched_shape_idx]:
+                                json_data["shapes"][matched_shape_idx]["description"] = ""
+                            json_data["shapes"][matched_shape_idx]["description"] += " [Fixed by belt_detect_sign_fix]"
+                            modified = True
+                        else:
+                            # 如果找不到匹配的shape（理论上不应该发生），添加新的
+                            print(f"[WARNING] {image_path.name} box{box_idx+1}: Could not find matching shape, adding new one")
+                            new_shape = {
+                                "label": target_label,
+                                "score": None,
+                                "points": xywh_to_points(final_x, final_y, final_w, final_h),
+                                "group_id": None,
+                                "description": "Fixed by belt_detect_sign_fix",
+                                "difficult": False,
+                                "shape_type": "rectangle",
+                                "flags": {},
+                                "attributes": {},
+                                "kie_linking": []
+                            }
+                            if "shapes" not in json_data:
+                                json_data["shapes"] = []
+                            json_data["shapes"].append(new_shape)
+                            modified = True
+                    else:
+                        # 没有匹配的原始框（理论上不应该到这里，因为前面已经验证过）
+                        print(f"[WARNING] {image_path.name} box{box_idx+1}: No original box to update")
+                        continue
         
         # 保存结果
         output_image_path = output_dir / image_path.name
