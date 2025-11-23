@@ -210,5 +210,6 @@ __marimo__/
 .github/
 
 Data/
+logs/
 output/
 input/

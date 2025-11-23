@@ -348,11 +348,16 @@ def find_sign_contour(roi_image: np.ndarray, detection_box: Tuple[int, int, int,
         combined_resized = cv2.resize(combined, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
         
         # 显示图像
-        window_name = f"Debug: {image_name} - Press any key to continue"
+        window_name = f"Debug: {image_name} - Press 'y' to accept or 'n' to reject"
         cv2.imshow(window_name, combined_resized)
-        print(f"[DEBUG] {image_name}: Showing panels (3x). Press 'y' to accept, other key to reject.")
+        print(f"[DEBUG] {image_name}: Showing panels (3x). Press 'y' to accept, 'n' to reject.")
         key = cv2.waitKey(0) & 0xFF
         accepted = (key == ord('y'))
+        if key == ord('n'):
+            print(f"[DEBUG] {image_name}: Rejected by user (pressed 'n')")
+        elif key != ord('y'):
+            print(f"[DEBUG] {image_name}: Invalid key pressed, treating as reject")
+            accepted = False
         cv2.destroyAllWindows()
     debug_info['accepted'] = accepted
     debug_info['final_sign_pixel'] = sign_pixel_value
@@ -406,7 +411,8 @@ def process_image(image_path: Path, json_path: Path, output_dir: Path,
                  use_yolo: bool = True, device: str = 'cpu', debug: bool = False,
                  iou_threshold: float = 0.5, morph_kernel_size: int = 5,
                  morph_iterations: int = 1, min_sign_brightness: int = 140,
-                 light_mode: str = 'uniform', error_log: Optional[Path] = None) -> bool:
+                 light_mode: str = 'uniform', error_log: Optional[Path] = None,
+                 accept_iou_threshold: float = 0.88, judge_iou_threshold: float = 0.7) -> bool:
     """
     处理单张图像和对应的JSON标注
     
@@ -424,6 +430,8 @@ def process_image(image_path: Path, json_path: Path, output_dir: Path,
         iou_threshold: IoU阈值，用于匹配原始标注（默认0.5）
         light_mode: 光照模式 uniform/vertical/horizontal
         error_log: 错误日志路径（仅在debug下拒绝时写入）
+        accept_iou_threshold: 接受阈值，YOLO模式下IoU大于此值自动接受（默认0.88）
+        judge_iou_threshold: 判断阈值，YOLO模式下IoU小于此值直接拒绝（默认0.7）
     
     Returns:
         是否处理成功
@@ -500,12 +508,11 @@ def process_image(image_path: Path, json_path: Path, output_dir: Path,
             # 通过IoU匹配找到对应的原始标注框
             original_box_in_roi = None
             current_box = (x, y, w, h)
+            max_iou = 0
+            best_match_box = None
             
             if original_boxes:
                 # 计算当前框与所有原始框的IoU
-                max_iou = 0
-                best_match_box = None
-                
                 for orig_box in original_boxes:
                     iou = calculate_iou(current_box, orig_box)
                     if iou > max_iou:
@@ -525,30 +532,69 @@ def process_image(image_path: Path, json_path: Path, output_dir: Path,
                     if debug:
                         print(f"[DEBUG] Matched original box with IoU={max_iou:.3f} for box {box_idx+1}")
             
+            # YOLO模式下的IoU验证
+            if use_yolo and model is not None:
+                if not original_boxes:
+                    # 没有原始标注，拒绝
+                    if error_log:
+                        header_needed = not error_log.exists()
+                        with open(error_log, 'a', encoding='utf-8') as f:
+                            if header_needed:
+                                f.write('image_name,image_path,json_path,mode,accepted,reason,light_mode,orig_box,yolo_box,detection_box,max_iou,thresh_offset,min_sign_brightness,expand_ratio,iou_threshold,morph_kernel_size,morph_iterations\n')
+                            det_box_str = str(current_box)
+                            f.write(f"{image_path.name},{image_path},{json_path},yolo,0,no_original_annotation,{light_mode},None,{det_box_str},{det_box_str},{max_iou:.4f},{thresh_offset},{min_sign_brightness},{expand_ratio},{iou_threshold},{morph_kernel_size},{morph_iterations}\n")
+                    print(f"[REJECT] {image_path.name} box{box_idx+1}: No original annotation found")
+                    continue
+                elif max_iou < judge_iou_threshold:
+                    # IoU低于判断阈值，直接拒绝
+                    if error_log:
+                        header_needed = not error_log.exists()
+                        with open(error_log, 'a', encoding='utf-8') as f:
+                            if header_needed:
+                                f.write('image_name,image_path,json_path,mode,accepted,reason,light_mode,orig_box,yolo_box,detection_box,max_iou,thresh_offset,min_sign_brightness,expand_ratio,iou_threshold,morph_kernel_size,morph_iterations\n')
+                            orig_box_str = str(best_match_box) if best_match_box else 'None'
+                            det_box_str = str(current_box)
+                            f.write(f"{image_path.name},{image_path},{json_path},yolo,0,low_iou,{light_mode},{orig_box_str},{det_box_str},{det_box_str},{max_iou:.4f},{thresh_offset},{min_sign_brightness},{expand_ratio},{iou_threshold},{morph_kernel_size},{morph_iterations}\n")
+                    print(f"[REJECT] {image_path.name} box{box_idx+1}: IoU={max_iou:.3f} < {judge_iou_threshold} (judge threshold)")
+                    continue
+            
             # 构建调试用的图像名称
             debug_name = f"{image_path.stem}_box{box_idx+1}"
             
             # 计算当前检测框在ROI中的相对坐标
             detection_box_in_roi = (int(x - exp_x), int(y - exp_y), int(w), int(h))
             
+            # 决定是否需要显示调试窗口
+            # debug模式：IoU > judge_threshold 就显示
+            # 非debug模式：judge_threshold < IoU < accept_threshold 才显示
+            need_window = False
+            if use_yolo and model is not None:
+                if debug:
+                    need_window = (max_iou >= judge_iou_threshold)
+                else:
+                    need_window = (judge_iou_threshold <= max_iou < accept_iou_threshold)
+            else:
+                need_window = debug  # JSON模式下保持原逻辑
+            
             # 查找标牌外接矩形
-            contour_result = find_sign_contour(roi, detection_box_in_roi, debug, debug_name, original_box_in_roi,
+            contour_result = find_sign_contour(roi, detection_box_in_roi, need_window, debug_name, original_box_in_roi,
                                               morph_kernel_size, morph_iterations, thresh_offset, min_sign_brightness,
                                               light_mode)
             if contour_result is not None:
                 sign_x, sign_y, sign_w, sign_h, dbg_info, accepted = contour_result
                 if debug and not accepted:
-                    # 记录失败日志，不修改JSON
+                    # 用户拒绝，记录失败日志，不修改JSON
                     if error_log:
                         header_needed = not error_log.exists()
                         with open(error_log, 'a', encoding='utf-8') as f:
                             if header_needed:
-                                f.write('image_name,image_path,json_path,mode,accepted,reason,light_mode,orig_box,proposed_box,detection_box,thresh_offset,min_sign_brightness,final_sign_pixel,final_threshold,expand_ratio,iou_threshold,morph_kernel_size,morph_iterations\n')
+                                f.write('image_name,image_path,json_path,mode,accepted,reason,light_mode,orig_box,yolo_box,detection_box,max_iou,proposed_box,final_sign_pixel,final_threshold,thresh_offset,min_sign_brightness,expand_ratio,iou_threshold,morph_kernel_size,morph_iterations\n')
                             mode_str = 'yolo' if (use_yolo and model is not None) else 'json'
-                            orig_box_str = str(original_box_in_roi) if original_box_in_roi else 'None'
+                            orig_box_str = str(best_match_box) if best_match_box else 'None'
+                            det_box_str = str(current_box)
                             proposed_box_str = str((sign_x, sign_y, sign_w, sign_h))
-                            det_box_str = str(detection_box_in_roi)
-                            f.write(f"{image_path.name},{image_path},{json_path},{mode_str},0,user_reject,{light_mode},{orig_box_str},{proposed_box_str},{det_box_str},{thresh_offset},{min_sign_brightness},{dbg_info.get('final_sign_pixel')},{dbg_info.get('final_threshold')},{expand_ratio},{iou_threshold},{morph_kernel_size},{morph_iterations}\n")
+                            f.write(f"{image_path.name},{image_path},{json_path},{mode_str},0,user_reject,{light_mode},{orig_box_str},{det_box_str},{det_box_str},{max_iou:.4f},{proposed_box_str},{dbg_info.get('final_sign_pixel')},{dbg_info.get('final_threshold')},{thresh_offset},{min_sign_brightness},{expand_ratio},{iou_threshold},{morph_kernel_size},{morph_iterations}\n")
+                    print(f"[REJECT] {image_path.name} box{box_idx+1}: User rejected")
                     continue  # 不应用修改
                 # accepted 或 非 debug 模式应用修改
                 final_x = exp_x + sign_x
@@ -602,7 +648,8 @@ def process_directory(input_dir: Path, output_dir: Path, model_path: Optional[Pa
                      target_label: str = "number", use_yolo: bool = False, debug: bool = False,
                      iou_threshold: float = 0.5, morph_kernel_size: int = 5,
                      morph_iterations: int = 1, min_sign_brightness: int = 140,
-                     light_mode: str = 'uniform', error_log: Optional[Path] = None):
+                     light_mode: str = 'uniform', error_log: Optional[Path] = None,
+                     accept_iou_threshold: float = 0.88, judge_iou_threshold: float = 0.7):
     """
     批量处理目录中的图像
     
@@ -667,7 +714,7 @@ def process_directory(input_dir: Path, output_dir: Path, model_path: Optional[Pa
         if process_image(image_path, json_path, output_dir, model,
                         expand_ratio, thresh_offset, target_label, use_yolo, device, debug,
                         iou_threshold, morph_kernel_size, morph_iterations, min_sign_brightness,
-                        light_mode, error_log):
+                        light_mode, error_log, accept_iou_threshold, judge_iou_threshold):
             success_count += 1
         else:
             error_count += 1
@@ -790,6 +837,20 @@ def main():
         help='调试拒绝时的错误日志文件路径（默认: 输出目录下error_log.csv）'
     )
     
+    parser.add_argument(
+        '--accept-iou-threshold',
+        type=float,
+        default=0.88,
+        help='接受阈值，YOLO模式下IoU大于此值自动接受（默认: 0.88）'
+    )
+    
+    parser.add_argument(
+        '--judge-iou-threshold',
+        type=float,
+        default=0.7,
+        help='判断阈值，YOLO模式下IoU小于此值直接拒绝（默认: 0.7）'
+    )
+    
     args = parser.parse_args()
     
     # 转换为Path对象
@@ -829,7 +890,9 @@ def main():
         args.morph_iterations,
         args.min_sign_brightness,
         args.light_mode,
-        error_log_path if args.debug else None
+        error_log_path if args.debug else None,
+        args.accept_iou_threshold,
+        args.judge_iou_threshold
     )
 
 
