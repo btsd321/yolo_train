@@ -1,0 +1,5 @@
+# 本脚本功能是将xml文件中的标注信息提取出来然后转换为yolo格式的txt标注文件
+# 输入：图片和xml文件所在文件夹路径
+# 输出：生成对应的yolo格式txt标注文件，保存在输入文件夹中
+# 已知信息：要保存的信息有三种一种是包裹delivery，一种是面单ExpressBillSeg，还有一种是标牌数字number
+# 已知信息：delivery和ExpressBillSeg是按照多边形标注的，number是按照矩形框标注的，转换时提取多边形的外接矩形框转换为yolo格式
