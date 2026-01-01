@@ -34,6 +34,9 @@ CLASS_COLORS = {
     19: (0, 140, 255)     # 深橙
 }
 
+# 用于跟踪已警告的类别ID
+_warned_class_ids = set()
+
 
 def load_class_names(names_file_path):
     """
@@ -134,8 +137,16 @@ def draw_yolo_bbox(image, annotations, class_names=None):
         x2 = int(x_center_px + width_px / 2)
         y2 = int(y_center_px + height_px / 2)
         
-        # 获取颜色和类别名称
-        color = CLASS_COLORS.get(class_id, (0, 255, 255))
+        # 获取颜色（支持超过20个类别，循环使用颜色）
+        if class_id >= 20:
+            if class_id not in _warned_class_ids:
+                print(f"⚠ 警告: 类别ID {class_id} 超过20，将循环使用颜色（使用颜色索引 {class_id % 20}）")
+                _warned_class_ids.add(class_id)
+            color = CLASS_COLORS.get(class_id % 20, (0, 255, 255))
+        else:
+            color = CLASS_COLORS.get(class_id, (0, 255, 255))
+        
+        # 获取类别名称
         if class_names and class_id in class_names:
             class_name = class_names[class_id]
             label = f'{class_name} (ID:{class_id})'
