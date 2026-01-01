@@ -221,11 +221,10 @@ if __name__ == '__main__':
     )
     
     parser.add_argument(
-        '-h', '--height',
+        '--height',
         type=int,
         default=None,
-        help='图片高度（像素），如果不指定则自动从图片文件读取',
-        dest='height'  # 避免与内置的-h/--help冲突
+        help='图片高度（像素），如果不指定则自动从图片文件读取'
     )
     
     args = parser.parse_args()
