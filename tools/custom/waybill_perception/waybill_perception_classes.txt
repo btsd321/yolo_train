@@ -1,0 +1,5 @@
+0 delivery
+1 box
+2 ExpressBillSeg
+3 BarCode
+4 2DCode

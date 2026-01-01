@@ -104,6 +104,23 @@ def draw_yolo_bbox(image, annotations, class_names=None):
     """
     img_height, img_width = image.shape[:2]
     
+    # 根据图像分辨率自适应调整参数
+    # 以1920x1080为基准
+    base_size = 1920
+    scale_factor = min(img_width, img_height) / base_size
+    
+    # 自适应线条粗细（最小为1，最大为10）
+    line_thickness = max(1, min(10, int(2 * scale_factor)))
+    
+    # 自适应字体大小（最小为0.3，最大为2.0）
+    font_scale = max(0.3, min(2.0, 0.6 * scale_factor))
+    
+    # 自适应字体粗细（最小为1，最大为5）
+    font_thickness = max(1, min(5, int(2 * scale_factor)))
+    
+    # 自适应边距
+    padding = max(2, int(5 * scale_factor))
+    
     for class_id, x_center, y_center, width, height in annotations:
         # 将归一化坐标转换为像素坐标
         x_center_px = int(x_center * img_width)
@@ -126,14 +143,10 @@ def draw_yolo_bbox(image, annotations, class_names=None):
             label = f'ID:{class_id}'
         
         # 绘制矩形框
-        cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
-        
-        # 准备标签文本
+        cv2.rectangle(image, (x1, y1), (x2, y2), color, line_thickness)
         
         # 计算文本大小
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.6
-        font_thickness = 2
         (text_width, text_height), baseline = cv2.getTextSize(
             label, font, font_scale, font_thickness
         )
@@ -141,8 +154,8 @@ def draw_yolo_bbox(image, annotations, class_names=None):
         # 绘制标签背景
         cv2.rectangle(
             image,
-            (x1, y1 - text_height - baseline - 5),
-            (x1 + text_width + 5, y1),
+            (x1, y1 - text_height - baseline - padding),
+            (x1 + text_width + padding, y1),
             color,
             -1
         )
@@ -151,7 +164,7 @@ def draw_yolo_bbox(image, annotations, class_names=None):
         cv2.putText(
             image,
             label,
-            (x1 + 2, y1 - baseline - 2),
+            (x1 + padding // 2, y1 - baseline - padding // 2),
             font,
             font_scale,
             (255, 255, 255),
@@ -199,6 +212,111 @@ def find_image_annotation_pairs(folder_path):
     return pairs
 
 
+class ImageViewer:
+    """支持鼠标缩放和拖拽的图像查看器"""
+    def __init__(self, window_name):
+        self.window_name = window_name
+        self.zoom_scale = 1.0
+        self.offset_x = 0
+        self.offset_y = 0
+        self.dragging = False
+        self.last_x = 0
+        self.last_y = 0
+        self.original_image = None
+        self.display_image = None
+        
+    def mouse_callback(self, event, x, y, flags, param):
+        """鼠标事件回调函数"""
+        if event == cv2.EVENT_MOUSEWHEEL:
+            # 鼠标滚轮缩放
+            if flags > 0:  # 向上滚动，放大
+                self.zoom_scale *= 1.1
+            else:  # 向下滚动，缩小
+                self.zoom_scale *= 0.9
+            
+            # 限制缩放范围
+            self.zoom_scale = max(0.1, min(10.0, self.zoom_scale))
+            self.update_display()
+            
+        elif event == cv2.EVENT_LBUTTONDOWN:
+            # 开始拖拽
+            self.dragging = True
+            self.last_x = x
+            self.last_y = y
+            
+        elif event == cv2.EVENT_LBUTTONUP:
+            # 结束拖拽
+            self.dragging = False
+            
+        elif event == cv2.EVENT_MOUSEMOVE:
+            # 拖拽移动
+            if self.dragging:
+                dx = x - self.last_x
+                dy = y - self.last_y
+                self.offset_x += dx
+                self.offset_y += dy
+                self.last_x = x
+                self.last_y = y
+                self.update_display()
+    
+    def set_image(self, image):
+        """设置要显示的图像"""
+        self.original_image = image.copy()
+        self.zoom_scale = 1.0
+        self.offset_x = 0
+        self.offset_y = 0
+        self.update_display()
+    
+    def update_display(self):
+        """更新显示的图像"""
+        if self.original_image is None:
+            return
+        
+        # 应用缩放
+        if self.zoom_scale != 1.0:
+            new_width = int(self.original_image.shape[1] * self.zoom_scale)
+            new_height = int(self.original_image.shape[0] * self.zoom_scale)
+            scaled_image = cv2.resize(self.original_image, (new_width, new_height))
+        else:
+            scaled_image = self.original_image.copy()
+        
+        # 创建显示画布（保持原始图像大小）
+        canvas = np.zeros_like(self.original_image)
+        
+        # 计算粘贴位置
+        h, w = scaled_image.shape[:2]
+        canvas_h, canvas_w = canvas.shape[:2]
+        
+        # 应用偏移量
+        x_start = self.offset_x
+        y_start = self.offset_y
+        
+        # 计算源图像和目标画布的有效区域
+        src_x1 = max(0, -x_start)
+        src_y1 = max(0, -y_start)
+        src_x2 = min(w, canvas_w - x_start)
+        src_y2 = min(h, canvas_h - y_start)
+        
+        dst_x1 = max(0, x_start)
+        dst_y1 = max(0, y_start)
+        dst_x2 = min(canvas_w, x_start + w)
+        dst_y2 = min(canvas_h, y_start + h)
+        
+        # 粘贴图像
+        if src_x2 > src_x1 and src_y2 > src_y1:
+            canvas[dst_y1:dst_y2, dst_x1:dst_x2] = scaled_image[src_y1:src_y2, src_x1:src_x2]
+        
+        self.display_image = canvas
+        cv2.imshow(self.window_name, self.display_image)
+    
+    def reset_view(self):
+        """重置视图"""
+        self.zoom_scale = 1.0
+        self.offset_x = 0
+        self.offset_y = 0
+        self.update_display()
+
+
 def visualize_yolo_dataset(folder_path, class_names=None, window_name='YOLO BBox Visualization'):
     """
     可视化YOLO数据集
@@ -214,10 +332,18 @@ def visualize_yolo_dataset(folder_path, class_names=None, window_name='YOLO BBox
     
     print(f"找到 {len(pairs)} 对图片和标注文件")
     print("操作说明:")
+    print("  鼠标滚轮: 放大/缩小图像")
+    print("  鼠标左键拖拽: 移动图像")
+    print("  按 'r': 重置视图（恢复原始大小和位置）")
     print("  按 'c' 或 空格键: 切换到下一张图片")
     print("  按 'b': 返回上一张图片")
     print("  按 'q' 或 ESC: 退出")
     print("-" * 60)
+    
+    # 创建图像查看器
+    viewer = ImageViewer(window_name)
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.setMouseCallback(window_name, viewer.mouse_callback)
     
     current_idx = 0
     
@@ -238,21 +364,28 @@ def visualize_yolo_dataset(folder_path, class_names=None, window_name='YOLO BBox
         vis_image = image.copy()
         vis_image = draw_yolo_bbox(vis_image, annotations, class_names)
         
+        # 根据图像分辨率自适应调整信息栏参数
+        base_size = 1920
+        scale_factor = min(vis_image.shape[1], vis_image.shape[0]) / base_size
+        info_height = max(30, int(40 * scale_factor))
+        info_font_scale = max(0.4, min(1.5, 0.7 * scale_factor))
+        info_font_thickness = max(1, min(4, int(2 * scale_factor)))
+        info_padding = max(5, int(10 * scale_factor))
+        
         # 添加图片信息
         img_name = os.path.basename(img_path)
         info_text = f"[{current_idx + 1}/{len(pairs)}] {img_name} - {len(annotations)} objects"
         
         # 在图片顶部添加信息栏
-        info_height = 40
         info_bar = np.zeros((info_height, vis_image.shape[1], 3), dtype=np.uint8)
         cv2.putText(
             info_bar,
             info_text,
-            (10, 28),
+            (info_padding, info_height - info_padding),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
+            info_font_scale,
             (255, 255, 255),
-            2
+            info_font_thickness
         )
         
         # 将信息栏和图片拼接
@@ -260,28 +393,36 @@ def visualize_yolo_dataset(folder_path, class_names=None, window_name='YOLO BBox
         
         # 自动调整窗口大小以适应屏幕
         screen_height = 1080  # 假设屏幕高度
+        initial_scale = 1.0
         if vis_image.shape[0] > screen_height:
-            scale = screen_height / vis_image.shape[0]
-            new_width = int(vis_image.shape[1] * scale)
-            new_height = int(vis_image.shape[0] * scale)
+            initial_scale = screen_height / vis_image.shape[0]
+            new_width = int(vis_image.shape[1] * initial_scale)
+            new_height = int(vis_image.shape[0] * initial_scale)
             vis_image = cv2.resize(vis_image, (new_width, new_height))
         
-        # 显示图片
-        cv2.imshow(window_name, vis_image)
+        # 设置图像到查看器
+        viewer.set_image(vis_image)
         
         # 打印当前图片信息
         print(f"[{current_idx + 1}/{len(pairs)}] {img_name} - {len(annotations)} 个目标")
         
         # 等待按键
-        key = cv2.waitKey(0) & 0xFF
-        
-        if key == ord('q') or key == 27:  # 'q' 或 ESC 退出
-            print("退出可视化")
-            break
-        elif key == ord('c') or key == ord(' '):  # 'c' 或 空格 下一张
-            current_idx = (current_idx + 1) % len(pairs)
-        elif key == ord('b'):  # 'b' 上一张
-            current_idx = (current_idx - 1) % len(pairs)
+        while True:
+            key = cv2.waitKey(10) & 0xFF
+            
+            if key == ord('q') or key == 27:  # 'q' 或 ESC 退出
+                print("退出可视化")
+                cv2.destroyAllWindows()
+                return
+            elif key == ord('c') or key == ord(' '):  # 'c' 或 空格 下一张
+                current_idx = (current_idx + 1) % len(pairs)
+                break
+            elif key == ord('b'):  # 'b' 上一张
+                current_idx = (current_idx - 1) % len(pairs)
+                break
+            elif key == ord('r'):  # 'r' 重置视图
+                viewer.reset_view()
+                print("视图已重置")
     
     cv2.destroyAllWindows()
 
@@ -299,6 +440,9 @@ if __name__ == '__main__':
   python %(prog)s -i ./data/annotations -n classes.txt
 
 操作说明:
+  鼠标滚轮: 放大/缩小图像
+  鼠标左键拖拽: 移动图像
+  按 'r': 重置视图（恢复原始大小和位置）
   按 'c' 或 空格键: 切换到下一张图片
   按 'b': 返回上一张图片
   按 'q' 或 ESC: 退出
