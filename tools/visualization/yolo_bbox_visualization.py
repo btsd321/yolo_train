@@ -10,23 +10,60 @@ from pathlib import Path
 import numpy as np
 
 
-# 类别名称映射（根据实际情况修改）
-CLASS_NAMES = {
-    0: 'delivery',      # 软包裹
-    1: 'box',           # 硬纸盒
-    2: 'ExpressBillSeg',# 面单
-    3: 'BarCode',       # 条形码
-    4: '2DCode'         # 二维码
+# 每个类别对应的颜色（BGR格式）- 20种颜色
+CLASS_COLORS = {
+    0: (0, 255, 0),       # 绿色
+    1: (255, 0, 0),       # 蓝色
+    2: (0, 0, 255),       # 红色
+    3: (255, 255, 0),     # 青色
+    4: (255, 0, 255),     # 洋红
+    5: (0, 255, 255),     # 黄色
+    6: (0, 165, 255),     # 橙色
+    7: (128, 0, 128),     # 紫色
+    8: (203, 192, 255),   # 粉红
+    9: (42, 42, 165),     # 棕色
+    10: (0, 128, 0),      # 深绿
+    11: (139, 0, 0),      # 深蓝
+    12: (0, 0, 139),      # 深红
+    13: (255, 191, 0),    # 天蓝
+    14: (0, 255, 191),    # 石灰绿
+    15: (80, 127, 255),   # 珊瑚色
+    16: (0, 215, 255),    # 金色
+    17: (139, 139, 0),    # 深青
+    18: (139, 0, 139),    # 深洋红
+    19: (0, 140, 255)     # 深橙
 }
 
-# 每个类别对应的颜色（BGR格式）
-CLASS_COLORS = {
-    0: (0, 255, 0),     # 绿色 - delivery
-    1: (255, 0, 0),     # 蓝色 - box
-    2: (0, 0, 255),     # 红色 - ExpressBillSeg
-    3: (255, 255, 0),   # 青色 - BarCode
-    4: (255, 0, 255)    # 洋红 - 2DCode
-}
+
+def load_class_names(names_file_path):
+    """
+    从txt文件加载类别名称
+    格式: 每行为 "id name"
+    返回: {class_id: class_name, ...}
+    """
+    class_names = {}
+    
+    if not names_file_path or not os.path.exists(names_file_path):
+        return class_names
+    
+    try:
+        with open(names_file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                
+                parts = line.split(maxsplit=1)
+                if len(parts) == 2:
+                    class_id = int(parts[0])
+                    class_name = parts[1]
+                    class_names[class_id] = class_name
+        
+        print(f"成功加载 {len(class_names)} 个类别名称")
+    except Exception as e:
+        print(f"警告: 加载类别名称文件时出错: {e}")
+    
+    return class_names
 
 
 def parse_yolo_bbox(txt_file_path):
@@ -59,9 +96,11 @@ def parse_yolo_bbox(txt_file_path):
     return annotations
 
 
-def draw_yolo_bbox(image, annotations):
+def draw_yolo_bbox(image, annotations, class_names=None):
     """
     在图片上绘制YOLO格式的bbox
+    参数:
+        class_names: 类别名称字典 {class_id: class_name}
     """
     img_height, img_width = image.shape[:2]
     
@@ -80,13 +119,16 @@ def draw_yolo_bbox(image, annotations):
         
         # 获取颜色和类别名称
         color = CLASS_COLORS.get(class_id, (0, 255, 255))
-        class_name = CLASS_NAMES.get(class_id, f'Class_{class_id}')
+        if class_names and class_id in class_names:
+            class_name = class_names[class_id]
+            label = f'{class_name} (ID:{class_id})'
+        else:
+            label = f'ID:{class_id}'
         
         # 绘制矩形框
         cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
         
         # 准备标签文本
-        label = f'{class_name} (ID:{class_id})'
         
         # 计算文本大小
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -157,9 +199,11 @@ def find_image_annotation_pairs(folder_path):
     return pairs
 
 
-def visualize_yolo_dataset(folder_path, window_name='YOLO BBox Visualization'):
+def visualize_yolo_dataset(folder_path, class_names=None, window_name='YOLO BBox Visualization'):
     """
     可视化YOLO数据集
+    参数:
+        class_names: 类别名称字典 {class_id: class_name}
     """
     # 查找所有成对的图片和标注
     pairs = find_image_annotation_pairs(folder_path)
@@ -192,7 +236,7 @@ def visualize_yolo_dataset(folder_path, window_name='YOLO BBox Visualization'):
         
         # 在图片上绘制bbox
         vis_image = image.copy()
-        vis_image = draw_yolo_bbox(vis_image, annotations)
+        vis_image = draw_yolo_bbox(vis_image, annotations, class_names)
         
         # 添加图片信息
         img_name = os.path.basename(img_path)
@@ -248,20 +292,23 @@ if __name__ == '__main__':
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例用法:
+  # 不使用类别名称（显示ID）
   python %(prog)s -i ./data/annotations
-  python %(prog)s -i D:/Project/yolo_train/Data/waybill_perception
+  
+  # 使用类别名称文件
+  python %(prog)s -i ./data/annotations -n classes.txt
 
 操作说明:
   按 'c' 或 空格键: 切换到下一张图片
   按 'b': 返回上一张图片
   按 'q' 或 ESC: 退出
 
-类别映射:
-  0: delivery (软包裹) - 绿色
-  1: box (硬纸盒) - 蓝色
-  2: ExpressBillSeg (面单) - 红色
-  3: BarCode (条形码) - 青色
-  4: 2DCode (二维码) - 洋红
+类别名称文件格式（可选）:
+  每行格式: id name
+  例如:
+    0 delivery
+    1 box
+    2 ExpressBillSeg
         """
     )
     
@@ -272,9 +319,27 @@ if __name__ == '__main__':
         help='输入文件夹路径，包含图片和对应的txt标注文件'
     )
     
+    parser.add_argument(
+        '-n', '--names',
+        type=str,
+        default=None,
+        help='类别名称文件路径（可选），格式: 每行为 "id name"'
+    )
+    
     args = parser.parse_args()
+    
+    # 加载类别名称（如果提供）
+    class_names = None
+    if args.names:
+        class_names = load_class_names(args.names)
+        if class_names:
+            print(f"类别名称: {len(class_names)} 个类别")
+        else:
+            print("未加载类别名称，将显示数字ID")
+    else:
+        print("未指定类别名称文件，将显示数字ID")
     
     print(f"输入文件夹: {args.input}")
     print("-" * 60)
     
-    visualize_yolo_dataset(args.input)
+    visualize_yolo_dataset(args.input, class_names)
