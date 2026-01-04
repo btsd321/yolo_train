@@ -409,8 +409,14 @@ def visualize_yolo_segment_dataset(folder_path, class_names=None, alpha=0.4, win
     while True:
         img_path, txt_path = pairs[current_idx]
         
-        # 读取图片
-        image = cv2.imread(img_path)
+        # 读取图片（支持中文路径）
+        try:
+            with open(img_path, 'rb') as f:
+                image_data = f.read()
+            image = cv2.imdecode(np.frombuffer(image_data, np.uint8), cv2.IMREAD_COLOR)
+        except Exception as e:
+            image = None
+        
         if image is None:
             print(f"错误: 无法读取图片 {img_path}")
             current_idx = (current_idx + 1) % len(pairs)
