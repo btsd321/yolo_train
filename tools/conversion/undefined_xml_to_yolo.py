@@ -25,9 +25,11 @@ def load_class_mapping(names_file_path):
     """
     从txt文件加载类别映射
     格式: 每行为 "id name"
+    支持多个类别名称映射到同一个ID（将视为同一类）
     返回: {class_name_lower: class_id, ...}
     """
     class_mapping = {}
+    id_to_names = {}  # 用于检测多个类别名对应同一ID的情况
     
     if not names_file_path or not os.path.exists(names_file_path):
         return None
@@ -44,9 +46,22 @@ def load_class_mapping(names_file_path):
                     class_id = int(parts[0])
                     class_name = parts[1].lower()  # 转换为小写以便匹配
                     class_mapping[class_name] = class_id
+                    
+                    # 记录ID对应的所有类别名
+                    if class_id not in id_to_names:
+                        id_to_names[class_id] = []
+                    id_to_names[class_id].append(parts[1])  # 保留原始大小写用于显示
         
         print(f"成功加载 {len(class_mapping)} 个类别映射")
-        print(f"允许的类别: {', '.join([f'{name}({id})' for name, id in class_mapping.items()])}")
+        
+        # 按ID排序显示类别映射
+        for class_id in sorted(id_to_names.keys()):
+            names = id_to_names[class_id]
+            if len(names) > 1:
+                print(f"  ID {class_id}: {', '.join(names)} (合并为同一类)")
+            else:
+                print(f"  ID {class_id}: {names[0]}")
+        
         return class_mapping
     except Exception as e:
         print(f"警告: 加载类别映射文件时出错: {e}")
@@ -332,7 +347,7 @@ def parse_xml_to_yolo(xml_file_path, input_folder, output_format='bbox', img_wid
     参数:
         output_format: 'bbox' 或 'segment'
         class_mapping: 类别映射字典 {class_name_lower: class_id} 或 None
-    返回: YOLO格式的标注行列表
+    返回: (YOLO格式的标注行列表, {class_id: set(原始标签类型)})
     """
     tree = ET.parse(xml_file_path)
     root = tree.getroot()
@@ -347,6 +362,7 @@ def parse_xml_to_yolo(xml_file_path, input_folder, output_format='bbox', img_wid
             img_width, img_height = 1920, 1080  # 默认值
     
     yolo_annotations = []
+    label_mapping = {}  # 记录每个class_id对应的原始标签类型
     
     # 处理矩形标注 (如果有rect元素)
     for rect in root.findall('rect'):
@@ -355,6 +371,11 @@ def parse_xml_to_yolo(xml_file_path, input_folder, output_format='bbox', img_wid
         
         if class_id is None:
             continue
+        
+        # 记录标签映射
+        if class_id not in label_mapping:
+            label_mapping[class_id] = set()
+        label_mapping[class_id].add(label_type)
         
         x = float(rect.get('x'))
         y = float(rect.get('y'))
@@ -388,6 +409,11 @@ def parse_xml_to_yolo(xml_file_path, input_folder, output_format='bbox', img_wid
         if class_id is None:
             continue
         
+        # 记录标签映射
+        if class_id not in label_mapping:
+            label_mapping[class_id] = set()
+        label_mapping[class_id].add(label_type)
+        
         points_str = area.get('points', '')
         if not points_str:
             continue
@@ -410,7 +436,7 @@ def parse_xml_to_yolo(xml_file_path, input_folder, output_format='bbox', img_wid
             coords_str = ' '.join([f"{coord:.6f}" for coord in normalized])
             yolo_annotations.append(f"{class_id} {coords_str}")
     
-    return yolo_annotations
+    return yolo_annotations, label_mapping
 
 
 def convert_folder(input_folder, output_format='bbox', img_width=None, img_height=None, class_mapping=None):
@@ -435,18 +461,25 @@ def convert_folder(input_folder, output_format='bbox', img_width=None, img_heigh
     print(f"输出格式: {format_name}")
     converted_count = 0
     used_class_ids = set()  # 收集所有使用的类别ID
+    class_id_to_labels = {}  # 收集每个ID对应的原始标签类型
     
     for xml_file in xml_files:
         try:
             # 解析XML并转换为YOLO格式
-            yolo_annotations = parse_xml_to_yolo(
+            yolo_annotations, label_mapping = parse_xml_to_yolo(
                 str(xml_file), input_folder, output_format, img_width, img_height, class_mapping
             )
             
-            # 收集使用的类别ID
+            # 收集使用的类别ID和对应的原始标签
             for annotation in yolo_annotations:
                 class_id = int(annotation.split()[0])
                 used_class_ids.add(class_id)
+            
+            # 合并标签映射
+            for class_id, labels in label_mapping.items():
+                if class_id not in class_id_to_labels:
+                    class_id_to_labels[class_id] = set()
+                class_id_to_labels[class_id].update(labels)
             
             # 生成对应的txt文件
             txt_file = xml_file.with_suffix('.txt')
@@ -465,6 +498,18 @@ def convert_folder(input_folder, output_format='bbox', img_width=None, img_heigh
             print(f"✗ 错误: 处理 {xml_file.name} 时出错: {e}")
     
     print(f"\n转换完成! 成功转换 {converted_count}/{len(xml_files)} 个文件")
+    
+    # 显示类别统计信息
+    if class_id_to_labels:
+        print(f"\n{'='*60}")
+        print("导出的类别统计:")
+        print(f"{'='*60}")
+        for class_id in sorted(class_id_to_labels.keys()):
+            labels = sorted(class_id_to_labels[class_id])
+            if len(labels) > 1:
+                print(f"  ID {class_id}: {', '.join(labels)} (已合并为同一类)")
+            else:
+                print(f"  ID {class_id}: {labels[0]}")
     
     # 检查类别ID的连续性
     if used_class_ids:
