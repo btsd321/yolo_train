@@ -73,8 +73,24 @@ def split_dataset(pairs, train_ratio, val_ratio, test_ratio, seed=42):
     random.shuffle(pairs_copy)
     
     total = len(pairs_copy)
-    train_count = int(total * train_ratio)
-    val_count = int(total * val_ratio)
+    
+    # 按比例计算每个集合的样本数
+    # 注意：剩余样本优先分配给训练集
+    if test_ratio == 0:
+        # 如果test比例为0，剩余样本分配给训练集
+        val_count = int(total * val_ratio)
+        test_count = 0
+        train_count = total - val_count
+    elif val_ratio == 0:
+        # 如果val比例为0，剩余样本分配给训练集
+        test_count = int(total * test_ratio)
+        val_count = 0
+        train_count = total - test_count
+    else:
+        # 正常情况：剩余样本分配给训练集
+        val_count = int(total * val_ratio)
+        test_count = int(total * test_ratio)
+        train_count = total - val_count - test_count
     
     train_pairs = pairs_copy[:train_count]
     val_pairs = pairs_copy[train_count:train_count + val_count]
