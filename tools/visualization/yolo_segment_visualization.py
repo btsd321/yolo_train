@@ -8,6 +8,7 @@ import os
 import argparse
 from pathlib import Path
 import numpy as np
+import shutil
 
 
 # 每个类别对应的颜色（BGR格式）- 20种颜色
@@ -372,13 +373,14 @@ print("    · 鼠标拖拽: 平移")
 print("    · reset_view(): 重置视图")
 
 
-def visualize_yolo_segment_dataset(folder_path, class_names=None, alpha=0.4, window_name='YOLO Segment Visualization'):
+def visualize_yolo_segment_dataset(folder_path, class_names=None, alpha=0.4, output_folder=None, window_name='YOLO Segment Visualization'):
     """
     可视化YOLO分割数据集
     参数:
         folder_path: 包含图片和标注文件的文件夹路径
         class_names: 类别名称字典 {class_id: class_name}
         alpha: 掩码透明度 (0.0-1.0)
+        output_folder: 输出文件夹路径（用于复制标注错误的文件）
         window_name: 窗口名称
     """
     # 查找所有成对的图片和标注
@@ -388,6 +390,12 @@ def visualize_yolo_segment_dataset(folder_path, class_names=None, alpha=0.4, win
         print(f"警告: 在 {folder_path} 中没有找到成对的图片和标注文件")
         return
     
+    # 创建输出文件夹（如果指定）
+    if output_folder:
+        output_path = Path(output_folder)
+        output_path.mkdir(parents=True, exist_ok=True)
+        print(f"错误标注输出文件夹: {output_folder}")
+    
     print(f"找到 {len(pairs)} 对图片和标注文件")
     print(f"掩码透明度: {alpha}")
     print("操作说明:")
@@ -396,6 +404,8 @@ def visualize_yolo_segment_dataset(folder_path, class_names=None, alpha=0.4, win
     print("  按 'r': 重置视图（恢复原始大小和位置）")
     print("  按 'c' 或 空格键: 切换到下一张图片")
     print("  按 'b': 返回上一张图片")
+    if output_folder:
+        print("  按 'm': 标记当前图片为错误标注（复制到输出文件夹）")
     print("  按 'q' 或 ESC: 退出")
     print("-" * 60)
     
@@ -487,6 +497,34 @@ def visualize_yolo_segment_dataset(folder_path, class_names=None, alpha=0.4, win
             elif key == ord('r'):  # 'r' 重置视图
                 viewer.reset_view()
                 print("视图已重置")
+            elif key == ord('m') and output_folder:  # 'm' 标记为错误标注
+                try:
+                    # 查找对应的xml文件
+                    img_file = Path(img_path)
+                    xml_file = img_file.with_suffix('.xml')
+                    
+                    output_path = Path(output_folder)
+                    
+                    # 复制图片文件
+                    shutil.copy2(img_path, output_path / img_file.name)
+                    print(f"✓ 已复制图片: {img_file.name}")
+                    
+                    # 复制xml文件（如果存在）
+                    if xml_file.exists():
+                        shutil.copy2(str(xml_file), output_path / xml_file.name)
+                        print(f"✓ 已复制XML: {xml_file.name}")
+                    else:
+                        print(f"⚠ 警告: 未找到对应的XML文件: {xml_file.name}")
+                    
+                    # 也复制txt文件
+                    txt_file = Path(txt_path)
+                    if txt_file.exists():
+                        shutil.copy2(txt_path, output_path / txt_file.name)
+                        print(f"✓ 已复制TXT: {txt_file.name}")
+                    
+                    print(f"→ 文件已复制到: {output_folder}")
+                except Exception as e:
+                    print(f"✗ 复制文件时出错: {e}")
     
     cv2.destroyAllWindows()
 
@@ -505,6 +543,9 @@ if __name__ == '__main__':
   
   # 调整掩码透明度
   python %(prog)s -i ./data/annotations -a 0.6
+  
+  # 指定输出文件夹用于保存错误标注
+  python %(prog)s -i ./data/annotations -o ./error_annotations
 
 操作说明:
   鼠标滚轮: 放大/缩小图像
@@ -512,6 +553,7 @@ if __name__ == '__main__':
   按 'r': 重置视图（恢复原始大小和位置）
   按 'c' 或 空格键: 切换到下一张图片
   按 'b': 返回上一张图片
+  按 'm': 标记当前图片为错误标注（需指定--output）
   按 'q' 或 ESC: 退出
 
 类别名称文件格式（可选）:
@@ -544,12 +586,23 @@ if __name__ == '__main__':
         help='掩码透明度 (0.0-1.0)，默认0.4'
     )
     
+    parser.add_argument(
+        '-o', '--output',
+        type=str,
+        default=None,
+        help='输出文件夹路径（可选），用于保存标注错误的图片和xml文件'
+    )
+    
     args = parser.parse_args()
     
     # 验证alpha参数
     if not 0.0 <= args.alpha <= 1.0:
         print("错误: alpha参数必须在0.0到1.0之间")
         exit(1)
+    
+    # 如果未指定output，默认为输入文件夹下的error子文件夹
+    if args.output is None:
+        args.output = os.path.join(args.input, 'error')
     
     # 加载类别名称（如果提供）
     class_names = None
@@ -563,9 +616,11 @@ if __name__ == '__main__':
         print("未指定类别名称文件，将显示数字ID")
     
     print(f"输入文件夹: {args.input}")
+    if args.output:
+        print(f"输出文件夹: {args.output}")
     print("-" * 60)
     
-    visualize_yolo_segment_dataset(args.input, class_names, args.alpha)
+    visualize_yolo_segment_dataset(args.input, class_names, args.alpha, args.output)
 
 
 print("\n" + "=" * 60)
