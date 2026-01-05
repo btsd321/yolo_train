@@ -7,9 +7,9 @@ set -e
 
 # 默认参数
 INPUT_FOLDER=""
-THRESHOLD="10G"  # 默认阈值 10G
+THRESHOLD="20G"  # 默认阈值
 THREADS=$(nproc)  # 默认使用所有CPU核心
-SPLIT_SIZE="2G"  # 分卷大小，默认2G
+SPLIT_SIZE="10G"  # 分卷大小
 OUTPUT_DIR="."   # 输出目录，默认当前目录
 
 # 帮助信息
@@ -21,10 +21,10 @@ show_help() {
   -i, --input <路径>        输入文件夹路径
 
 可选参数:
-  -t, --threshold <大小>    阈值大小，超过则分卷压缩（默认: 10G）
+  -t, --threshold <大小>    阈值大小，超过则分卷压缩
                             支持的单位: K, M, G, T
   -p, --threads <数量>      压缩线程数（默认: CPU核心数）
-  -s, --split-size <大小>   分卷大小（默认: 2G）
+  -s, --split-size <大小>   分卷大小
   -o, --output <路径>       输出目录（默认: 当前目录）
   -h, --help               显示此帮助信息
 
