@@ -207,8 +207,9 @@ def main():
     parser.add_argument(
         '-o', '--output',
         type=str,
-        required=True,
-        help='输出数据集文件夹路径'
+        required=False,
+        default=None,
+        help='输出数据集文件夹路径（默认: 在输入文件夹内创建dataset文件夹）'
     )
     
     parser.add_argument(
@@ -246,6 +247,10 @@ def main():
     )
     
     args = parser.parse_args()
+    
+    # 如果没有指定输出路径，默认在输入文件夹内创建dataset文件夹
+    if args.output is None:
+        args.output = os.path.join(args.input, 'dataset')
     
     # 验证比例总和
     total_ratio = args.train + args.val + args.test

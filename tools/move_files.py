@@ -15,6 +15,11 @@ def is_xml_file(filename):
     return Path(filename).suffix.lower() == '.xml'
 
 
+def is_txt_file(filename):
+    """检查文件是否为TXT格式"""
+    return Path(filename).suffix.lower() == '.txt'
+
+
 def move_files(input_folder, output_folder):
     """
     将input文件夹及其子文件夹中的所有图片和XML文件移动到output文件夹
@@ -41,8 +46,8 @@ def move_files(input_folder, output_folder):
     # 递归遍历input文件夹及其子文件夹
     for root, dirs, files in os.walk(input_path):
         for filename in files:
-            # 检查是否为图片或XML文件
-            if is_image_file(filename) or is_xml_file(filename):
+            # 检查是否为图片、XML或TXT文件
+            if is_image_file(filename) or is_xml_file(filename) or is_txt_file(filename):
                 source_file = Path(root) / filename
                 dest_file = output_path / filename
                 
@@ -73,7 +78,7 @@ def move_files(input_folder, output_folder):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='将input文件夹及其子文件夹中的所有图片和XML文件剪切到output文件夹'
+        description='将input文件夹及其子文件夹中的所有图片、XML和TXT文件剪切到output文件夹'
     )
     
     parser.add_argument(
