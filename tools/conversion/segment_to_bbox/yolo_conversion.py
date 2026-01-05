@@ -9,11 +9,29 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
 
-def read_classes_file(classes_file: str) -> List[str]:
-    """读取类别文件"""
+def read_classes_file(classes_file: str) -> Dict[int, str]:
+    """读取类别文件，支持 'ID 类别名' 格式"""
+    classes_dict = {}
     with open(classes_file, 'r', encoding='utf-8') as f:
-        classes = [line.strip() for line in f if line.strip()]
-    return classes
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(maxsplit=1)
+            if len(parts) == 2:
+                # 格式: ID 类别名
+                try:
+                    class_id = int(parts[0])
+                    class_name = parts[1]
+                    classes_dict[class_id] = class_name
+                except ValueError:
+                    print(f"警告: 无法解析行: {line}")
+            elif len(parts) == 1:
+                # 兼容标准格式，行号作为ID
+                class_name = parts[0]
+                class_id = len(classes_dict)
+                classes_dict[class_id] = class_name
+    return classes_dict
 
 
 def parse_segment_line(line: str) -> Tuple[int, List[float]]:
@@ -141,19 +159,19 @@ def create_class_mapping(used_classes: Set[int]) -> Dict[int, int]:
     return mapping
 
 
-def save_remapped_classes(original_classes: List[str], class_mapping: Dict[int, int], 
+def save_remapped_classes(original_classes: Dict[int, str], class_mapping: Dict[int, int], 
                           output_path: str) -> None:
     """保存重映射后的类别文件"""
-    # 创建新的类别列表
-    remapped_classes = [''] * len(class_mapping)
+    # 创建新的类别字典
+    remapped_classes = {}
     for old_id, new_id in class_mapping.items():
-        if old_id < len(original_classes):
+        if old_id in original_classes:
             remapped_classes[new_id] = original_classes[old_id]
     
-    # 保存到文件
+    # 保存到文件（按照 'ID 类别名' 格式）
     with open(output_path, 'w', encoding='utf-8') as f:
-        for class_name in remapped_classes:
-            f.write(f"{class_name}\n")
+        for new_id in sorted(remapped_classes.keys()):
+            f.write(f"{new_id} {remapped_classes[new_id]}\n")
     
     print(f"重映射后的类别文件已保存到: {output_path}")
 
@@ -186,8 +204,9 @@ def main():
     original_classes = None
     if args.names and os.path.exists(args.names):
         original_classes = read_classes_file(args.names)
-        allowed_classes = set(range(len(original_classes)))
+        allowed_classes = set(original_classes.keys())
         print(f"已加载类别文件，共 {len(original_classes)} 个类别")
+        print(f"允许的类别ID: {sorted(allowed_classes)}")
     
     # 收集实际使用的类别
     print("扫描标注文件，收集使用的类别...")
@@ -205,7 +224,8 @@ def main():
         # 保存重映射后的类别文件
         if args.names and original_classes:
             names_dir = os.path.dirname(args.names)
-            remapped_names_file = os.path.join(names_dir, 'classes_remapped.txt')
+            names_stem = Path(args.names).stem
+            remapped_names_file = os.path.join(names_dir, f'{names_stem}_remap.txt')
             save_remapped_classes(original_classes, class_mapping, remapped_names_file)
     
     # 转换标注文件
