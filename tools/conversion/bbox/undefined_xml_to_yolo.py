@@ -1,9 +1,7 @@
-# 本脚本功能是将xml文件中的标注信息提取出来然后转换为yolo格式的txt标注文件
+# 本脚本功能是将xml文件中的标注信息提取出来然后转换为yolo bbox格式的txt标注文件
 # 输入：图片和xml文件所在文件夹路径
-# 输出：生成对应的yolo格式txt标注文件，保存在输入文件夹中
-# 支持两种输出模式：
-#   1. YOLO分割格式（--format segment）：保留多边形点坐标
-#   2. YOLO bbox格式（--format bbox）：使用多边形外接矩形框
+# 输出：生成对应的yolo bbox格式txt标注文件，保存在输入文件夹中
+# 支持rect和area两种XML元素，area元素会转换为外接矩形框
 # 类别映射：
 #   0: delivery (软包裹)
 #   1: box (硬纸盒)
@@ -104,18 +102,6 @@ def convert_to_yolo_bbox(xmin, ymin, xmax, ymax, img_width, img_height):
     width = (xmax - xmin) / img_width
     height = (ymax - ymin) / img_height
     return x_center, y_center, width, height
-
-
-def convert_polygon_to_yolo_segment(points, img_width, img_height):
-    """
-    将多边形点转换为YOLO分割格式 (归一化的点坐标)
-    返回: [x1, y1, x2, y2, ..., xn, yn] 归一化后的值
-    """
-    normalized_points = []
-    for x, y in points:
-        normalized_points.append(x / img_width)
-        normalized_points.append(y / img_height)
-    return normalized_points
 
 
 def get_class_id(label_type, class_mapping=None):
@@ -341,11 +327,10 @@ def generate_remapped_classes_file(input_folder, id_remapping, original_class_ma
     print(f"{'='*60}")
 
 
-def parse_xml_to_yolo(xml_file_path, input_folder, output_format='bbox', img_width=None, img_height=None, class_mapping=None):
+def parse_xml_to_yolo(xml_file_path, input_folder, img_width=None, img_height=None, class_mapping=None):
     """
-    解析单个XML文件并转换为YOLO格式
+    解析单个XML文件并转换为YOLO bbox格式
     参数:
-        output_format: 'bbox' 或 'segment'
         class_mapping: 类别映射字典 {class_name_lower: class_id} 或 None
     返回: (YOLO格式的标注行列表, {class_id: set(原始标签类型)})
     """
@@ -388,18 +373,11 @@ def parse_xml_to_yolo(xml_file_path, input_folder, output_format='bbox', img_wid
         xmax = x + w
         ymax = y + h
         
-        if output_format == 'bbox':
-            # YOLO bbox格式
-            x_center, y_center, width, height = convert_to_yolo_bbox(
-                xmin, ymin, xmax, ymax, img_width, img_height
-            )
-            yolo_annotations.append(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}")
-        else:
-            # YOLO segment格式 - 矩形转为4个点的多边形
-            points = [(xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax)]
-            normalized = convert_polygon_to_yolo_segment(points, img_width, img_height)
-            coords_str = ' '.join([f"{coord:.6f}" for coord in normalized])
-            yolo_annotations.append(f"{class_id} {coords_str}")
+        # YOLO bbox格式
+        x_center, y_center, width, height = convert_to_yolo_bbox(
+            xmin, ymin, xmax, ymax, img_width, img_height
+        )
+        yolo_annotations.append(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}")
     
     # 处理多边形标注 (area元素)
     for area in root.findall('area'):
@@ -423,27 +401,20 @@ def parse_xml_to_yolo(xml_file_path, input_folder, output_format='bbox', img_wid
         if len(points) < 3:
             continue
         
-        if output_format == 'bbox':
-            # YOLO bbox格式 - 使用外接矩形框
-            xmin, ymin, xmax, ymax = get_bounding_box(points)
-            x_center, y_center, width, height = convert_to_yolo_bbox(
-                xmin, ymin, xmax, ymax, img_width, img_height
-            )
-            yolo_annotations.append(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}")
-        else:
-            # YOLO segment格式 - 保留多边形点
-            normalized = convert_polygon_to_yolo_segment(points, img_width, img_height)
-            coords_str = ' '.join([f"{coord:.6f}" for coord in normalized])
-            yolo_annotations.append(f"{class_id} {coords_str}")
+        # YOLO bbox格式 - 使用外接矩形框
+        xmin, ymin, xmax, ymax = get_bounding_box(points)
+        x_center, y_center, width, height = convert_to_yolo_bbox(
+            xmin, ymin, xmax, ymax, img_width, img_height
+        )
+        yolo_annotations.append(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}")
     
     return yolo_annotations, label_mapping
 
 
-def convert_folder(input_folder, output_format='bbox', img_width=None, img_height=None, class_mapping=None):
+def convert_folder(input_folder, img_width=None, img_height=None, class_mapping=None):
     """
-    转换文件夹中所有的XML文件为YOLO格式
+    转换文件夹中所有的XML文件为YOLO bbox格式
     参数:
-        output_format: 'bbox' 或 'segment'
         class_mapping: 类别映射字典 {class_name_lower: class_id} 或 None
     """
     input_path = Path(input_folder)
@@ -456,9 +427,8 @@ def convert_folder(input_folder, output_format='bbox', img_width=None, img_heigh
         print(f"警告: 在 {input_folder} 中没有找到XML文件")
         return
     
-    format_name = "YOLO分割格式" if output_format == 'segment' else "YOLO bbox格式"
     print(f"找到 {len(xml_files)} 个XML文件")
-    print(f"输出格式: {format_name}")
+    print(f"输出格式: YOLO bbox格式")
     converted_count = 0
     used_class_ids = set()  # 收集所有使用的类别ID
     class_id_to_labels = {}  # 收集每个ID对应的原始标签类型
@@ -467,7 +437,7 @@ def convert_folder(input_folder, output_format='bbox', img_width=None, img_heigh
         try:
             # 解析XML并转换为YOLO格式
             yolo_annotations, label_mapping = parse_xml_to_yolo(
-                str(xml_file), input_folder, output_format, img_width, img_height, class_mapping
+                str(xml_file), input_folder, img_width, img_height, class_mapping
             )
             
             # 收集使用的类别ID和对应的原始标签
@@ -549,14 +519,6 @@ if __name__ == '__main__':
     )
     
     parser.add_argument(
-        '-f', '--format',
-        type=str,
-        choices=['bbox', 'segment'],
-        default='bbox',
-        help='输出格式: bbox=传统YOLO检测框格式, segment=YOLO分割格式 (默认: bbox)'
-    )
-    
-    parser.add_argument(
         '-w', '--width',
         type=int,
         default=None,
@@ -590,14 +552,14 @@ if __name__ == '__main__':
     
     # 执行转换
     print(f"输入文件夹: {args.input}")
-    print(f"输出格式: {'YOLO分割格式' if args.format == 'segment' else 'YOLO bbox格式'}")
+    print(f"输出格式: YOLO bbox格式")
     if args.width and args.height:
         print(f"指定图片尺寸: {args.width}x{args.height}")
     else:
         print("图片尺寸: 自动检测")
     print("-" * 60)
     
-    convert_folder(args.input, args.format, args.width, args.height, class_mapping)
+    convert_folder(args.input, args.width, args.height, class_mapping)
     
     # 显示跳过的类别总结
     if _warned_skipped_classes:
