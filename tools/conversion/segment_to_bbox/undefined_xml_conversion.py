@@ -43,18 +43,20 @@ def indent(elem: ET.Element, level: int = 0):
 	# Pretty-print XML with consistent indent; keep root closing tag at column 0
 	indent_str = "    "
 	child_indent = "\n" + (level + 1) * indent_str
-	closing_indent = "\n" + level * indent_str if level > 0 else "\n"
-
+	
 	if len(elem):
 		if not elem.text or not elem.text.strip():
 			elem.text = child_indent
-		for child in elem:
+		for i, child in enumerate(elem):
 			indent(child, level + 1)
-		if not elem.tail or not elem.tail.strip():
-			elem.tail = closing_indent
-	else:
-		if not elem.tail or not elem.tail.strip():
-			elem.tail = closing_indent
+			# Last child before closing tag should end with newline + parent indent
+			if i == len(elem) - 1:
+				if not child.tail or not child.tail.strip():
+					child.tail = "\n" + level * indent_str
+	
+	# Set tail for all non-root elements
+	if level > 0 and (not elem.tail or not elem.tail.strip()):
+		elem.tail = "\n" + level * indent_str
 
 
 def convert_file(src_path: Path, dst_path: Path):
