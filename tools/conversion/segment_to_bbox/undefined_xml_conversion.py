@@ -40,18 +40,21 @@ def area_to_bbox(area_elem: ET.Element):
 
 
 def indent(elem: ET.Element, level: int = 0):
-	# ET.indent is not available in older Python versions used in some environments
-	i = "\n" + level * "    "
+	# Pretty-print XML with consistent indent; keep root closing tag at column 0
+	indent_str = "    "
+	child_indent = "\n" + (level + 1) * indent_str
+	closing_indent = "\n" + level * indent_str if level > 0 else "\n"
+
 	if len(elem):
 		if not elem.text or not elem.text.strip():
-			elem.text = i + "    "
+			elem.text = child_indent
 		for child in elem:
 			indent(child, level + 1)
 		if not elem.tail or not elem.tail.strip():
-			elem.tail = i
+			elem.tail = closing_indent
 	else:
-		if level and (not elem.tail or not elem.tail.strip()):
-			elem.tail = i
+		if not elem.tail or not elem.tail.strip():
+			elem.tail = closing_indent
 
 
 def convert_file(src_path: Path, dst_path: Path):
