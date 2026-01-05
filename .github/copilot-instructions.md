@@ -9,6 +9,11 @@
     - `sh/`: Linux shell 脚本。
   - `tools/`: 提供训练、数据转换和预处理脚本。
 
+## 工具说明
+  - 训练示例工程位于 `tools/train.py` ，实际训练时不通项目使用 `tools/custom/` 下的子项目中的训练脚本。
+  - 生成数据集工具文件位于 `tools/generate_dataset.py` 用于将保存图片和yolo标注文件的文件夹转换为yolo数据集。
+  - 可视化工具位于 `tools/visualization/` 目录下，包含多种标注格式的可视化脚本。
+
 ## 标注文件
   - 标注文件支持多种格式，包括 YOLO、XML、json、XanyLabel(json) 等。
   - 类别文件（一般--names参数输入）格式为纯文本，每行格式为({class_id} {class_name})。class_id不一定连续, 在必要时进行检查和重映射处理，保证输出yolo格式时类别连续且从0开始。
