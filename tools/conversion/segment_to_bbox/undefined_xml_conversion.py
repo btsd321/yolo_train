@@ -1,6 +1,10 @@
 import argparse
+import shutil
 from pathlib import Path
 import xml.etree.ElementTree as ET
+
+
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp")
 
 
 def parse_points(points_str: str):
@@ -87,6 +91,17 @@ def convert_file(src_path: Path, dst_path: Path):
 	tree.write(dst_path, encoding="UTF-8", xml_declaration=True)
 
 
+def copy_sibling_image(xml_path: Path, output_dir: Path):
+	stem = xml_path.stem
+	for ext in IMAGE_EXTS:
+		candidate = xml_path.with_suffix(ext)
+		if candidate.exists():
+			dst_img = output_dir / f"{stem}{ext}"
+			shutil.copy2(candidate, dst_img)
+			return dst_img
+	return None
+
+
 def run(input_dir: Path, output_dir: Path):
 	xml_files = sorted(p for p in input_dir.glob("*.xml") if p.is_file())
 	if not xml_files:
@@ -98,7 +113,11 @@ def run(input_dir: Path, output_dir: Path):
 	for xml_path in xml_files:
 		dst_path = output_dir / xml_path.name
 		convert_file(xml_path, dst_path)
-		print(f"Converted {xml_path.name} -> {dst_path}")
+		img_dst = copy_sibling_image(xml_path, output_dir)
+		if img_dst:
+			print(f"Converted {xml_path.name} -> {dst_path} (image copied to {img_dst})")
+		else:
+			print(f"Converted {xml_path.name} -> {dst_path} (no sibling image found)")
 
 
 def parse_args():
