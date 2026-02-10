@@ -1,0 +1,3 @@
+0 ExpressBillSeg
+1 BarCode
+2 2DCode
