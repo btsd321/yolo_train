@@ -215,8 +215,8 @@ def main():
     parser.add_argument(
         '--train',
         type=float,
-        default=0.7,
-        help='训练集比例 (默认: 0.7)'
+        default=0.8,
+        help='训练集比例 (默认: 0.8)'
     )
     
     parser.add_argument(
@@ -229,8 +229,8 @@ def main():
     parser.add_argument(
         '--test',
         type=float,
-        default=0.1,
-        help='测试集比例 (默认: 0.1)'
+        default=0.0,
+        help='测试集比例 (默认: 0.0)'
     )
     
     parser.add_argument(

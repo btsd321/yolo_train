@@ -10,7 +10,7 @@ if __name__ == '__main__':
     # Train the model on the COCO8 example dataset for 100 epochs
     results = model.train(data=dataset_config_file,
                           epochs=300,
-                          imgsz=640,
+                          imgsz=960,
                           batch=16,
                           device=0,
                           project="output",
