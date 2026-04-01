@@ -1,8 +1,8 @@
 from ultralytics import YOLO
 
 if __name__ == '__main__':
-    dataset_config_file = f"D:/Project/yolo_train/tools/custom/waybill_perception/config/dataset.yaml"
-    model_config_file = f"D:/Project/yolo_train/tools/custom/waybill_perception/config/yolo26m-obb.yaml"
+    dataset_config_file = f"/home/lixinlong/Project/yolo_train/tools/custom/waybill_perception/config/dataset.yaml"
+    model_config_file = f"/home/lixinlong/Project/yolo_train/tools/custom/waybill_perception/config/yolo26m-obb.yaml"
 
     # Load a COCO-pretrained YOLO26n model
     model = YOLO(model_config_file, task="obb")
