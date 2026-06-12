@@ -212,5 +212,6 @@ Data/
 logs/
 output/
 input/
+.ultralytics/
 
 *.pt

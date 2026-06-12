@@ -1,8 +1,11 @@
+import os
+os.environ["YOLO_CONFIG_DIR"] = os.path.join(os.path.dirname(__file__), "../../../../.ultralytics")
+
 from ultralytics import YOLO
 
 if __name__ == '__main__':
-    dataset_config_file = f"D:/Project/yolo_train/tools/custom/waybill_perception/config/dataset.yaml"
-    model_config_file = f"D:/Project/yolo_train/tools/custom/waybill_perception/config/yolo26m-obb.yaml"
+    dataset_config_file = f"D:\\Project\\yolo_train\\tools\\custom\\linden_perception\\config\\dataset.yaml"
+    model_config_file = f"D:\\Project\\yolo_train\\Data\\linden_perception\\parcel_seg38_640x.pt"
 
     # Load a COCO-pretrained YOLO26n model
     model = YOLO(model_config_file, task="segment")
@@ -11,7 +14,7 @@ if __name__ == '__main__':
     results = model.train(data=dataset_config_file,
                           epochs=300,
                           imgsz=640,
-                          batch=16,
+                          batch=4,
                           device=0,
                           project="output",
                           name="linden_perception_seg",
