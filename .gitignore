@@ -215,3 +215,5 @@ input/
 .ultralytics/
 
 *.pt
+
+runs/

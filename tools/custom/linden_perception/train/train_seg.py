@@ -5,7 +5,7 @@ from ultralytics import YOLO
 
 if __name__ == '__main__':
     dataset_config_file = f"D:\\Project\\yolo_train\\tools\\custom\\linden_perception\\config\\dataset.yaml"
-    model_config_file = f"D:\\Project\\yolo_train\\Data\\linden_perception\\parcel_seg38_640x.pt"
+    model_config_file = f"D:\\Project\\yolo_train\\tools\\custom\\linden_perception\\config\\yolo26m-seg.yaml"
 
     # Load a COCO-pretrained YOLO26n model
     model = YOLO(model_config_file, task="segment")

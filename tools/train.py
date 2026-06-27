@@ -327,7 +327,21 @@ def parse_args():
         default=1.0,
         help='使用数据集的比例 (默认: 1.0，即全部数据)'
     )
-    
+
+    parser.add_argument(
+        '--conf',
+        type=float,
+        default=None,
+        help='验证置信度阈值，用于过滤低置信度检测结果 (默认: None，即使用默认值0.001)'
+    )
+
+    parser.add_argument(
+        '--iou',
+        type=float,
+        default=0.7,
+        help='验证IoU阈值，用于NMS (默认: 0.7)'
+    )
+
     return parser.parse_args()
 
 
@@ -453,6 +467,8 @@ def main():
             rect=args.rect,
             close_mosaic=args.close_mosaic,
             fraction=args.fraction,
+            conf=args.conf,
+            iou=args.iou,
         )
         
         print("\n" + "=" * 80)
