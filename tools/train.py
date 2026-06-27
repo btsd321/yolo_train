@@ -111,6 +111,27 @@ def parse_args():
         help='权重衰减系数 (默认: 0.0005)'
     )
     
+    parser.add_argument(
+        '--cls',
+        type=float,
+        default=0.5,
+        help='分类loss权重，增大可减少误检 (默认: 0.5)'
+    )
+
+    parser.add_argument(
+        '--box',
+        type=float,
+        default=7.5,
+        help='框回归loss权重，减小可让模型更关注分类 (默认: 7.5)'
+    )
+
+    parser.add_argument(
+        '--cls-pw',
+        type=float,
+        default=0.0,
+        help='类别频率权重指数，1.0=完全逆频率加权 (默认: 0.0，禁用)'
+    )
+
     # 数据增强参数
     parser.add_argument(
         '--hsv-h',
@@ -435,7 +456,10 @@ def main():
             momentum=args.momentum,
             weight_decay=args.weight_decay,
             cos_lr=args.cos_lr,
-            
+            cls=args.cls,
+            box=args.box,
+            cls_pw=args.cls_pw,
+
             # 数据增强
             hsv_h=args.hsv_h,
             hsv_s=args.hsv_s,

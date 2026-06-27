@@ -1,16 +1,17 @@
 @echo off
 chcp 65001 >nul
 REM ============================================================================
-REM YOLO12 训练脚本 - 面单感知数据集
+REM YOLO26 端到端训练脚本 - 面单感知数据集
+REM 优化: cls/box权重调整减少误判，MixUp增强泛化，类别权重平衡
 REM ============================================================================
 REM 使用说明:
-REM   直接双击运行使用默认参数
+REM   直接双击运行使用默认参数（已针对减少误判优化）
 REM   或在命令行中使用自定义参数，例如:
-REM   train_waybill_perception.bat --epochs 200 --batch 32 --conf 0.5
+REM     train_linden_perception.bat --epochs 200 --batch 32 --cls 2.0 --box 5.0
 REM ============================================================================
 
 echo ============================================================================
-echo YOLO12 模型训练 - 面单感知数据集
+echo YOLO26 端到端模型训练 - 面单感知数据集
 echo ============================================================================
 echo.
 
@@ -43,7 +44,7 @@ if not exist "%DATA_YAML%" (
     exit /b 1
 )
 
-REM 默认参数
+REM 默认参数（已针对端到端减少误判优化）
 set MODEL=D:\Project\yolo_train\Data\dataset\linden_perception_dataset_hefei_20260624\parcel_seg40_640x_hefei.pt
 set EPOCHS=300
 set BATCH=16
@@ -51,7 +52,10 @@ set IMGSZ=640
 set DEVICE=0
 set PROJECT=linden_perception
 set NAME=yolo26m_train_20260627
-set CONF=0.001
+set CLS=1.0
+set BOX=5.0
+set CLS_PW=1.0
+set WEIGHT_DECAY=0.001
 
 REM 解析命令行参数（如果有）
 :parse_args
@@ -86,8 +90,32 @@ if /i "%~1"=="--name" (
     shift
     goto parse_args
 )
-if /i "%~1"=="--conf" (
-    set CONF=%~2
+if /i "%~1"=="--cls" (
+    set CLS=%~2
+    shift
+    shift
+    goto parse_args
+)
+if /i "%~1"=="--box" (
+    set BOX=%~2
+    shift
+    shift
+    goto parse_args
+)
+if /i "%~1"=="--cls-pw" (
+    set CLS_PW=%~2
+    shift
+    shift
+    goto parse_args
+)
+if /i "%~1"=="--mixup" (
+    set MIXUP=%~2
+    shift
+    shift
+    goto parse_args
+)
+if /i "%~1"=="--weight-decay" (
+    set WEIGHT_DECAY=%~2
     shift
     shift
     goto parse_args
@@ -103,7 +131,11 @@ echo   训练轮数: %EPOCHS%
 echo   批次大小: %BATCH%
 echo   图像尺寸: %IMGSZ%
 echo   设备: %DEVICE%
-echo   置信度阈值: %CONF%
+echo   cls权重(分类): %CLS%
+echo   box权重(框回归): %BOX%
+echo   类别频率权重指数: %CLS_PW%
+echo   MixUp增强: %MIXUP%
+echo   权重衰减: %WEIGHT_DECAY%
 echo   保存路径: %PROJECT%\%NAME%
 echo.
 echo ----------------------------------------------------------------------------
@@ -119,18 +151,20 @@ python tools\train.py ^
     --batch %BATCH% ^
     --imgsz %IMGSZ% ^
     --device %DEVICE% ^
-    --conf %CONF% ^
+    --cls %CLS% ^
+    --box %BOX% ^
+    --cls-pw %CLS_PW% ^
+    --mixup %MIXUP% ^
+    --weight-decay %WEIGHT_DECAY% ^
     --optimizer auto ^
     --lr0 0.01 ^
     --lrf 0.01 ^
-    --weight-decay 0.0005 ^
     --project "%PROJECT%" ^
     --name "%NAME%" ^
     --workers 8 ^
     --patience 50 ^
     --save-period -1 ^
     --mosaic 1.0 ^
-    --mixup 0.0 ^
     --fliplr 0.5 ^
     --hsv-h 0.015 ^
     --hsv-s 0.7 ^
