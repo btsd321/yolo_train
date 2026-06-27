@@ -3,28 +3,73 @@
 # Optimized: cls/box weight adjustment to reduce false positives, MixUp for generalization, class weight balancing
 # ============================================================================
 param(
+    # 预训练模型路径或模型配置文件 .yaml
     [string]$Model      = "D:\Project\yolo_train\Data\dataset\linden_perception_dataset_hefei_20260624\parcel_seg40_640x_hefei.pt",
+
+    # 训练轮数
     [int]$Epochs         = 300,
-    [int]$Batch          = 16,
+
+    # 批次大小（每GPU）
+    [int]$Batch          = 8,
+
+    # 输入图像尺寸（像素，正方形）
     [int]$Imgsz          = 640,
+
+    # 训练设备：0/1 单卡，"0,1" 多卡，"cpu"
     [string]$Device      = "0",
+
+    # 输出根目录（位于 runs/ 下）
     [string]$Project     = "linden_perception",
+
+    # 实验名称，结果保存在 Project/Name 下
     [string]$Name        = "yolo26m_train_20260627",
+
+    # 分类loss权重（越大越能减少误判）
     [float]$Cls          = 1.0,
+
+    # 框回归loss权重（越小则模型越专注分类，减少误判）
     [float]$Box          = 5.0,
+
+    # 类别频率权重指数：0.0=禁用，1.0=完全逆频率加权
     [float]$ClsPw        = 1.0,
+
+    # MixUp增强概率（0.0=禁用，0.15~0.2可减少过拟合）
     [float]$Mixup        = 0.0,
+
+    # 权重衰减L2正则化（越大抗过拟合越强）
     [float]$WeightDecay  = 0.001,
+
+    # 优化器：SGD, Adam, AdamW, NAdam, RAdam, RMSProp, auto
     [string]$Optimizer   = "auto",
+
+    # 初始学习率
     [float]$Lr0          = 0.01,
+
+    # 最终学习率因子：final_lr = lr0 * lrf
     [float]$Lrf          = 0.01,
+
+    # 数据加载线程数
     [int]$Workers        = 8,
+
+    # 早停耐心值：连续N个epoch无改善则停止
     [int]$Patience       = 50,
+
+    # 每N个epoch保存一次模型（-1=仅保存last和best）
     [int]$SavePeriod     = -1,
+
+    # Mosaic增强概率（1.0=训练期间始终开启）
     [float]$Mosaic       = 1.0,
+
+    # 水平翻转概率
     [float]$FlipLr       = 0.5,
+
+    # HSV色调增强范围（百分比）
     [float]$HsvH         = 0.015,
+
+    # HSV饱和度增强范围（百分比）
     [float]$HsvS         = 0.7,
+
+    # HSV明度增强范围（百分比）
     [float]$HsvV         = 0.4
 )
 
