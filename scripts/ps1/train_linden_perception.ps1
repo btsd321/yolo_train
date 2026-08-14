@@ -4,13 +4,13 @@
 # ============================================================================
 param(
     # 预训练模型路径或模型配置文件 .yaml [默认: 见下]
-    [string]$Model      = "D:\Project\yolo_train\Data\dataset\linden_perception_dataset_hefei_20260624\parcel_seg40_640x_hefei.pt",
+    [string]$Model      = "D:\Project\yolo_train\runs\segment\linden_perception\yolo26m_train_20260627\weights\parcel_seg41_640x.pt",
 
     # 训练轮数 [默认: 100]
     [int]$Epochs         = 300,
 
     # 批次大小（每GPU） [默认: 16]
-    [int]$Batch          = 8,
+    [int]$Batch          = 16,
 
     # 输入图像尺寸（像素，正方形） [默认: 640]
     [int]$Imgsz          = 640,
@@ -22,7 +22,7 @@ param(
     [string]$Project     = "linden_perception",
 
     # 实验名称，结果保存在 Project/Name 下 [默认: yolo26m_train_20260627]
-    [string]$Name        = "yolo26m_train_20260627",
+    [string]$Name        = "yolo26m_train_20260813",
 
     # 分类loss权重，越大越能减少误判 [默认: 0.5]
     [float]$Cls          = 1.0,
