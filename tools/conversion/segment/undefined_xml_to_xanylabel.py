@@ -53,7 +53,7 @@ def parse_points(points_str):
     解析多边形点坐标字符串
     例如: "(x1,y1);(x2,y2);(x3,y3);..."
     返回: [[x1, y1], [x2, y2], [x3, y3], ...]
-    自动去除连续重复的点
+    自动去除连续重复的点和首尾重合的点
     """
     points = []
     point_pairs = points_str.strip().strip(';').split(';')
@@ -69,6 +69,18 @@ def parse_points(points_str):
             if last_point is None or current_point != last_point:
                 points.append(current_point)
                 last_point = current_point
+
+    # 移除首尾重合的点（至少保留3个点）
+    if len(points) >= 3:
+        first_point = points[0]
+        last_point = points[-1]
+        dx = abs(first_point[0] - last_point[0])
+        dy = abs(first_point[1] - last_point[1])
+        distance = (dx**2 + dy**2)**0.5
+
+        # 如果首尾点距离小于0.03像素，移除尾点
+        if distance < 0.03:
+            points = points[:-1]
 
     return points
 
