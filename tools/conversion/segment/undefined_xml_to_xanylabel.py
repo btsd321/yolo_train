@@ -53,14 +53,23 @@ def parse_points(points_str):
     解析多边形点坐标字符串
     例如: "(x1,y1);(x2,y2);(x3,y3);..."
     返回: [[x1, y1], [x2, y2], [x3, y3], ...]
+    自动去除连续重复的点
     """
     points = []
     point_pairs = points_str.strip().strip(';').split(';')
+    last_point = None
+
     for pair in point_pairs:
         pair = pair.strip('()')
         if pair:
             x, y = pair.split(',')
-            points.append([float(x), float(y)])
+            current_point = [float(x), float(y)]
+
+            # 跳过与上一个点相同的点
+            if last_point is None or current_point != last_point:
+                points.append(current_point)
+                last_point = current_point
+
     return points
 
 
