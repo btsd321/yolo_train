@@ -4,7 +4,7 @@
 # ============================================================================
 param(
     # 预训练模型路径或模型配置文件 .yaml [默认: 见下]
-    [string]$Model      = "D:\Project\yolo_train\runs\segment\linden_perception\yolo26m_train_20260627\weights\parcel_seg41_640x.pt",
+    [string]$Model      = "D:\Project\yolo_train\runs\segment\linden_perception\yolo26m_train_20260813\weights\parcel_seg42_640x.pt",
 
     # 训练轮数 [默认: 100]
     [int]$Epochs         = 300,
@@ -22,7 +22,7 @@ param(
     [string]$Project     = "linden_perception",
 
     # 实验名称，结果保存在 Project/Name 下 [默认: yolo26m_train_20260627]
-    [string]$Name        = "yolo26m_train_20260813",
+    [string]$Name        = "yolo26m_train_20260814",
 
     # 分类loss权重，越大越能减少误判 [默认: 0.5]
     [float]$Cls          = 1.0,
@@ -58,10 +58,13 @@ param(
     [int]$SavePeriod     = -1,
 
     # Mosaic增强概率，1.0=训练期间始终开启 [默认: 1.0]
-    [float]$Mosaic       = 1.0,
+    [float]$Mosaic       = 0,
 
     # 水平翻转概率 [默认: 0.5]
     [float]$FlipLr       = 0.5,
+
+    # 垂直翻转概率 [默认: 0.0]
+    [float]$FlipUd       = 0.5,
 
     # HSV色调增强范围（百分比） [默认: 0.015]
     [float]$HsvH         = 0.015,
@@ -160,6 +163,7 @@ $PythonArgs = @(
     "--save-period", $SavePeriod,
     "--mosaic", $Mosaic,
     "--fliplr", $FlipLr,
+    "--flipud", $FlipUd,
     "--hsv-h", $HsvH,
     "--hsv-s", $HsvS,
     "--hsv-v", $HsvV,

@@ -18,7 +18,8 @@ if __name__ == '__main__':
                           device=0,
                           project="output",
                           name="linden_perception_seg",
-                          exist_ok=True
+                          exist_ok=True,
+                          degrees=10,
                           )
 
     # # Run inference with the YOLO26n model on the 'bus.jpg' image
