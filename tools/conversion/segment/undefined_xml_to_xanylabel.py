@@ -1,15 +1,17 @@
 # 本脚本功能是将xml文件中的标注信息提取出来然后转换为xanythinglabel格式的json标注文件
 # 输入：图片和xml文件所在文件夹路径
-# 输出：生成对应的xanythinglabel格式json标注文件，保存在输入文件夹中
+# 输出：生成对应的xanythinglabel格式json标注文件，保存到输出目录（默认为输入目录下的 xanylabel 目录）
 # 支持两种输出模式：
 #   1. segment格式（--format segment）：保留多边形点坐标
 #   2. rectangle格式（--format bbox）：使用多边形外接矩形框
 # 类别映射: 根据输入的classes.txt文件进行类别映射，未在文件中定义的类别将被跳过
+# 图片复制: 使用 --save-img 时，在导出json的同时复制对应图片到输出目录，使图片与json一一对应
 
 import os
 import xml.etree.ElementTree as ET
 import json
 import argparse
+import shutil
 from pathlib import Path
 from PIL import Image
 
@@ -263,52 +265,79 @@ def parse_xml_to_xanylabel(xml_file_path, input_folder, output_format='segment',
     return xanylabel_data
 
 
-def convert_folder(input_folder, output_format='segment', class_mapping=None):
+def convert_folder(input_folder, output_format='segment', class_mapping=None, save_img=False, output_folder=None):
     """
     转换文件夹中所有的XML文件为XAnyLabel格式
     参数:
         output_format: 'segment' 或 'bbox'
         class_mapping: 类别映射字典 {class_name_lower: class_name} 或 None
+        save_img: 是否同时复制对应的图片到输出目录，使图片与json一一对应
+        output_folder: 输出目录路径，默认为输入目录下的 xanylabel 目录
     """
     input_path = Path(input_folder)
     if not input_path.exists():
         print(f"错误: 文件夹不存在: {input_folder}")
         return
-    
+
+    # 确定输出目录，默认为输入目录下的 xanylabel 目录
+    if output_folder:
+        output_path = Path(output_folder)
+    else:
+        output_path = input_path / 'xanylabel'
+    output_path.mkdir(parents=True, exist_ok=True)
+
     xml_files = list(input_path.glob('*.xml'))
     if not xml_files:
         print(f"警告: 在 {input_folder} 中没有找到XML文件")
         return
-    
+
     format_name = "矩形框格式" if output_format == 'bbox' else "多边形格式"
     print(f"找到 {len(xml_files)} 个XML文件")
     print(f"输出格式: {format_name}")
+    print(f"输出目录: {output_path}")
+    if save_img:
+        print("已启用图片复制: 图片与json将一一对应输出")
     converted_count = 0
-    
+    img_copied_count = 0
+
     for xml_file in xml_files:
         try:
             # 解析XML并转换为XAnyLabel格式
             xanylabel_data = parse_xml_to_xanylabel(
                 str(xml_file), input_folder, output_format, class_mapping
             )
-            
-            # 生成对应的json文件
-            json_file = xml_file.with_suffix('.json')
-            
+
+            # 生成对应的json文件（保存到输出目录）
+            json_file = output_path / (xml_file.stem + '.json')
+
             # 写入JSON文件
             with open(json_file, 'w', encoding='utf-8') as f:
                 json.dump(xanylabel_data, f, indent=2, ensure_ascii=False)
-            
+
             if xanylabel_data["shapes"]:
                 converted_count += 1
                 print(f"✓ 已转换: {xml_file.name} -> {json_file.name} ({len(xanylabel_data['shapes'])} 个标注)")
             else:
                 print(f"⚠ 跳过: {xml_file.name} (没有有效标注)")
-                
+
+            # 如果启用图片复制，将json对应的图片复制到输出目录
+            if save_img:
+                img_filename = xanylabel_data.get("imagePath")
+                if img_filename:
+                    src_img_path = os.path.join(input_folder, img_filename)
+                    dst_img_path = output_path / img_filename
+                    if os.path.exists(src_img_path):
+                        shutil.copy2(src_img_path, dst_img_path)
+                        img_copied_count += 1
+                    else:
+                        print(f"⚠ 警告: 找不到图片 {img_filename}，无法复制")
+
         except Exception as e:
             print(f"✗ 错误: 处理 {xml_file.name} 时出错: {e}")
-    
+
     print(f"\n转换完成! 成功转换 {converted_count}/{len(xml_files)} 个文件")
+    if save_img:
+        print(f"已复制 {img_copied_count} 张图片")
     
     # 显示跳过的类别总结
     if _warned_skipped_classes:
@@ -331,6 +360,12 @@ if __name__ == '__main__':
   
   # 使用类别映射文件
   python %(prog)s -i ./data/annotations -n classes.txt --format segment
+
+  # 导出json的同时复制对应图片（图片与json一一对应）
+  python %(prog)s -i ./data/annotations --save-img
+
+  # 指定输出目录（默认输出到输入目录下的 xanylabel 目录）
+  python %(prog)s -i ./data/annotations -o ./output --save-img
         """
     )
     
@@ -339,6 +374,13 @@ if __name__ == '__main__':
         type=str,
         default=r"D:/Project/yolo_train/Data/waybill_perception",
         help='输入文件夹路径，包含XML文件和对应的图片文件'
+    )
+
+    parser.add_argument(
+        '-o', '--output',
+        type=str,
+        default=None,
+        help='输出目录路径，json和图片保存到此目录 (默认: 输入目录下的 xanylabel 目录)'
     )
     
     parser.add_argument(
@@ -355,7 +397,14 @@ if __name__ == '__main__':
         default=None,
         help='类别名称文件路径（可选），格式: 每行为 "id name"。如果指定，只导出该文件中定义的类别'
     )
-    
+
+    parser.add_argument(
+        '--save-img',
+        action='store_true',
+        default=False,
+        help='是否在导出json的同时复制对应的图片到输出目录，使图片与json一一对应 (默认: False，仅输出json)'
+    )
+
     args = parser.parse_args()
     
     # 加载类别映射（如果提供）
@@ -369,7 +418,9 @@ if __name__ == '__main__':
     
     # 执行转换
     print(f"输入文件夹: {args.input}")
+    print(f"输出目录: {args.output if args.output else os.path.join(args.input, 'xanylabel')}")
     print(f"输出格式: {'矩形框格式' if args.format == 'bbox' else '多边形格式'}")
+    print(f"保存图片: {'是' if args.save_img else '否'}")
     print("-" * 60)
-    
-    convert_folder(args.input, args.format, class_mapping)
+
+    convert_folder(args.input, args.format, class_mapping, save_img=args.save_img, output_folder=args.output)
