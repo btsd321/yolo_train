@@ -1,6 +1,9 @@
-# 本脚本的功能是输入图片和yolo标注文件所在文件夹路径，按照指定的比例划分训练集、验证集和测试集，输出对应的txt文件
-# 输入由argparse模块处理
-# 输出文件夹格式:
+# 本脚本的功能是输入图片和标注文件所在文件夹路径，按照指定的比例划分训练集、验证集和测试集
+# 支持两种任务模式：
+#   1. detect（默认）：输入图片+YOLO格式txt标注文件，输出 images/ + labels/ 结构
+#   2. classify：输入按类别子目录组织的图片文件夹，输出 {split}/{class_name}/ 结构
+#
+# detect 模式输出文件夹格式:
 # dataset/
 #   ├── images/
 #   │   ├── train
@@ -10,6 +13,24 @@
 #       ├── train
 #       ├── val
 #       └── test
+#   ├── train.txt
+#   ├── val.txt
+#   └── test.txt
+#
+# classify 模式输出文件夹格式（YOLO 图像分类标准格式）:
+# dataset/
+#   ├── train/
+#   │   ├── class_a/
+#   │   │   ├── img1.jpg
+#   │   │   └── img2.jpg
+#   │   └── class_b/
+#   │       └── img3.jpg
+#   ├── val/
+#   │   ├── class_a/
+#   │   └── class_b/
+#   └── test/
+#       ├── class_a/
+#       └── class_b/
 
 import os
 import argparse
@@ -19,6 +40,14 @@ from pathlib import Path
 from collections import defaultdict
 
 
+# 支持的图片格式
+IMG_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.JPG', '.JPEG', '.PNG', '.BMP', '.webp', '.WEBP'}
+
+
+# ============================================================================
+# 检测模式函数 (detect)
+# ============================================================================
+
 def get_image_label_pairs(input_folder):
     """
     获取输入文件夹中所有的图片和标注文件对
@@ -26,13 +55,11 @@ def get_image_label_pairs(input_folder):
     """
     input_path = Path(input_folder)
     
-    # 支持的图片格式
-    img_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.JPG', '.JPEG', '.PNG', '.BMP'}
-    
-    # 查找所有图片文件
-    image_files = []
-    for ext in img_extensions:
-        image_files.extend(input_path.glob(f'*{ext}'))
+    # 查找所有图片文件（大小写不敏感去重）
+    image_files = set()
+    for ext in IMG_EXTENSIONS:
+        image_files.update(input_path.glob(f'*{ext}'))
+    image_files = sorted(image_files)
     
     # 构建图片-标注对
     pairs = []
@@ -101,7 +128,7 @@ def split_dataset(pairs, train_ratio, val_ratio, test_ratio, seed=42):
 
 def create_dataset_structure(output_folder):
     """
-    创建数据集文件夹结构
+    创建检测数据集文件夹结构
     """
     output_path = Path(output_folder)
     
@@ -154,7 +181,7 @@ def generate_file_list(pairs, output_folder, split_name):
 
 def analyze_dataset(pairs):
     """
-    分析数据集的类别分布
+    分析检测数据集的类别分布
     """
     class_counts = defaultdict(int)
     total_objects = 0
@@ -171,17 +198,134 @@ def analyze_dataset(pairs):
     return class_counts, total_objects
 
 
+# ============================================================================
+# 分类模式函数 (classify)
+# ============================================================================
+
+def get_classify_images(input_folder):
+    """
+    扫描输入文件夹中的类别子目录，收集每个类别的图片文件
+    输入文件夹结构应为:
+      input_folder/
+        ├── class_a/
+        │   ├── img1.jpg
+        │   └── img2.jpg
+        └── class_b/
+            └── img3.jpg
+    
+    返回: {class_name: [image_path, ...], ...}
+    """
+    input_path = Path(input_folder)
+    class_images = {}
+    
+    # 遍历输入文件夹的子目录，每个子目录是一个类别
+    for item in sorted(input_path.iterdir()):
+        if not item.is_dir():
+            continue
+        
+        class_name = item.name
+        # 查找该类别目录下的所有图片（大小写不敏感去重）
+        images = set()
+        for ext in IMG_EXTENSIONS:
+            images.update(item.glob(f'*{ext}'))
+        
+        if images:
+            class_images[class_name] = sorted(images)
+            print(f"  类别 '{class_name}': {len(images)} 张图片")
+        else:
+            print(f"  警告: 类别目录 '{class_name}' 中没有图片文件")
+    
+    return class_images
+
+
+def split_classify_dataset(class_images, train_ratio, val_ratio, test_ratio, seed=42):
+    """
+    对分类数据集按类别进行分层抽样划分
+    每个类别独立按比例划分，保持各类别在 train/val/test 中的比例一致
+    
+    返回: {split_name: {class_name: [image_path, ...], ...}, ...}
+    """
+    random.seed(seed)
+    
+    splits = {'train': {}, 'val': {}, 'test': {}}
+    
+    for class_name, images in class_images.items():
+        images_copy = images.copy()
+        random.shuffle(images_copy)
+        
+        total = len(images_copy)
+        
+        # 按比例计算每个集合的样本数
+        if test_ratio == 0:
+            val_count = int(total * val_ratio)
+            test_count = 0
+            train_count = total - val_count
+        elif val_ratio == 0:
+            test_count = int(total * test_ratio)
+            val_count = 0
+            train_count = total - test_count
+        else:
+            val_count = int(total * val_ratio)
+            test_count = int(total * test_ratio)
+            train_count = total - val_count - test_count
+        
+        splits['train'][class_name] = images_copy[:train_count]
+        splits['val'][class_name] = images_copy[train_count:train_count + val_count]
+        splits['test'][class_name] = images_copy[train_count + val_count:]
+    
+    return splits
+
+
+def create_classify_structure(output_folder, class_names):
+    """
+    创建分类数据集文件夹结构
+    结构: output/{split}/{class_name}/
+    """
+    output_path = Path(output_folder)
+    
+    dirs = []
+    for split in ['train', 'val', 'test']:
+        for class_name in class_names:
+            dirs.append(output_path / split / class_name)
+    
+    for dir_path in dirs:
+        dir_path.mkdir(parents=True, exist_ok=True)
+    
+    return output_path
+
+
+def copy_classify_files(splits, output_folder):
+    """
+    复制图片到分类数据集对应的 {split}/{class_name}/ 目录
+    """
+    output_path = Path(output_folder)
+    
+    for split_name, class_dict in splits.items():
+        for class_name, images in class_dict.items():
+            dest_dir = output_path / split_name / class_name
+            for img_file in images:
+                shutil.copy2(img_file, dest_dir / img_file.name)
+
+
+# ============================================================================
+# 主函数
+# ============================================================================
+
 def main():
     parser = argparse.ArgumentParser(
-        description='将YOLO格式数据集按比例划分为训练集、验证集和测试集',
+        description='将数据集按比例划分为训练集、验证集和测试集，支持检测(detect)和分类(classify)两种模式',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例用法:
+  # 检测模式（默认）
   python %(prog)s -i ./data/annotations -o ./dataset
   python %(prog)s -i ./data/annotations -o ./dataset --train 0.7 --val 0.2 --test 0.1
-  python %(prog)s -i ./data/annotations -o ./dataset --seed 123
-  
-输出结构:
+
+  # 分类模式
+  python %(prog)s -i ./data/raw -o ./dataset --task classify --train 0.8 --val 0.2
+  python %(prog)s -i ./data/raw -o ./dataset --task classify --train 0.7 --val 0.15 --test 0.15 --seed 123
+
+检测模式输出结构:
   dataset/
     ├── images/
     │   ├── train/
@@ -194,6 +338,18 @@ def main():
     ├── train.txt
     ├── val.txt
     └── test.txt
+
+分类模式输出结构 (YOLO 图像分类标准格式):
+  dataset/
+    ├── train/
+    │   ├── class_a/
+    │   └── class_b/
+    ├── val/
+    │   ├── class_a/
+    │   └── class_b/
+    └── test/
+        ├── class_a/
+        └── class_b/
         """
     )
     
@@ -201,7 +357,7 @@ def main():
         '-i', '--input',
         type=str,
         required=True,
-        help='输入文件夹路径，包含图片文件和对应的YOLO格式txt标注文件'
+        help='输入文件夹路径（detect模式: 图片+YOLO标注; classify模式: 按类别子目录组织的图片）'
     )
     
     parser.add_argument(
@@ -210,6 +366,14 @@ def main():
         required=False,
         default=None,
         help='输出数据集文件夹路径（默认: 在输入文件夹内创建dataset文件夹）'
+    )
+    
+    parser.add_argument(
+        '--task',
+        type=str,
+        choices=['detect', 'classify'],
+        default='detect',
+        help='任务类型: detect=目标检测(图片+标注), classify=图像分类(按类别子目录) (默认: detect)'
     )
     
     parser.add_argument(
@@ -243,7 +407,7 @@ def main():
     parser.add_argument(
         '--no-copy',
         action='store_true',
-        help='不复制文件，仅生成文件列表txt'
+        help='不复制文件，仅生成文件列表txt（仅detect模式有效）'
     )
     
     args = parser.parse_args()
@@ -264,7 +428,7 @@ def main():
         return
     
     print("=" * 60)
-    print("YOLO数据集划分工具")
+    print(f"YOLO数据集划分工具 ({args.task} 模式)")
     print("=" * 60)
     print(f"输入文件夹: {args.input}")
     print(f"输出文件夹: {args.output}")
@@ -272,6 +436,14 @@ def main():
     print(f"随机种子: {args.seed}")
     print("-" * 60)
     
+    if args.task == 'classify':
+        run_classify(args)
+    else:
+        run_detect(args)
+
+
+def run_detect(args):
+    """检测模式主流程"""
     # 获取图片-标注对
     print("正在扫描输入文件夹...")
     pairs = get_image_label_pairs(args.input)
@@ -308,7 +480,7 @@ def main():
     
     # 创建输出文件夹结构
     print(f"\n正在创建输出文件夹结构: {args.output}")
-    output_path = create_dataset_structure(args.output)
+    create_dataset_structure(args.output)
     
     # 复制文件
     if not args.no_copy:
@@ -336,7 +508,56 @@ def main():
         print(f"  生成: {test_list}")
     
     print("\n" + "=" * 60)
-    print("✓ 数据集划分完成!")
+    print("[OK] 数据集划分完成!")
+    print("=" * 60)
+
+
+def run_classify(args):
+    """分类模式主流程"""
+    # 扫描类别子目录
+    print("正在扫描类别子目录...")
+    class_images = get_classify_images(args.input)
+    
+    if not class_images:
+        print("错误: 输入文件夹中没有找到包含图片的类别子目录")
+        print("提示: classify 模式要求输入文件夹下每个子目录代表一个类别，如:")
+        print("  input/")
+        print("    ├── class_a/")
+        print("    │   ├── img1.jpg")
+        print("    │   └── img2.jpg")
+        print("    └── class_b/")
+        print("        └── img3.jpg")
+        return
+    
+    total_images = sum(len(imgs) for imgs in class_images.values())
+    print(f"\n共 {len(class_images)} 个类别, {total_images} 张图片")
+    
+    # 划分数据集（分层抽样）
+    print("\n正在划分数据集...")
+    splits = split_classify_dataset(class_images, args.train, args.val, args.test, args.seed)
+    
+    # 打印划分统计
+    print(f"\n划分结果:")
+    for split_name in ['train', 'val', 'test']:
+        split_total = sum(len(imgs) for imgs in splits[split_name].values())
+        print(f"  {split_name}: {split_total} 张图片")
+        for class_name in sorted(splits[split_name].keys()):
+            count = len(splits[split_name][class_name])
+            print(f"    {class_name}: {count}")
+    
+    # 创建输出文件夹结构
+    print(f"\n正在创建输出文件夹结构: {args.output}")
+    class_names = sorted(class_images.keys())
+    create_classify_structure(args.output, class_names)
+    
+    # 复制文件
+    print("\n正在复制文件...")
+    copy_classify_files(splits, args.output)
+    print("  复制完成")
+    
+    print("\n" + "=" * 60)
+    print("[OK] 分类数据集划分完成!")
+    print(f"  输出目录: {args.output}")
     print("=" * 60)
 
 
