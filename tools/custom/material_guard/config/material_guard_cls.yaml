@@ -1,0 +1,25 @@
+# Material Guard 图像分类数据集配置
+# 两分类: feed(上料) / no_feed(不上料)
+# 数据集格式: YOLO 分类格式
+#   material_guard_dataset/
+#     ├── train/
+#     │   ├── feed/
+#     │   └── no_feed/
+#     ├── val/
+#     │   ├── feed/
+#     │   └── no_feed/
+#     └── test/
+#         ├── feed/
+#         └── no_feed/
+
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+path: D:\Data\material_guard\material_guard_dataset # dataset root dir
+train: train # train images (relative to 'path') 1569 images
+val: val # val images (relative to 'path') 392 images
+test: test # test images (optional)
+
+# Classes
+nc: 2
+names:
+  0: feed
+  1: no_feed
