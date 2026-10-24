@@ -9,9 +9,9 @@ if __name__ == '__main__':
 
     # Train the model on the material guard dataset
     results = model.train(data=dataset_config_file,
-                          epochs=100,
-                          imgsz=224,
-                          batch=32,
+                          epochs=300,
+                          imgsz=640,
+                          batch=8,
                           device=0,
                           project="output",
                           name="material_guard_cls",
